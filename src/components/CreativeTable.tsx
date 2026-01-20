@@ -141,14 +141,14 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-800">不調CR</h3>
-            <p className="text-sm text-gray-500">ROAS 110%未満</p>
+            <p className="text-sm text-gray-500">赤字額が大きい上位5本</p>
           </div>
         </div>
 
         {poorCreatives.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <span className="material-symbols-outlined text-4xl mb-2 block text-teal-400">celebration</span>
-            <p className="text-teal-600">不調なクリエイティブはありません</p>
+            <p className="text-teal-600">赤字のクリエイティブはありません</p>
           </div>
         ) : (
           <div className="overflow-x-auto max-h-80 overflow-y-auto">

@@ -115,9 +115,12 @@ export default function Tab2Report() {
   // (未分類)を除外したCR一覧（マトリクス・好調/不調CR用）
   const classifiedCR = aggregatedByCreative.filter(cr => cr.creativeName !== '(未分類)');
 
-  // 好調CR（利益TOP3）と不調CR（ROAS 110%未満）
+  // 好調CR（利益TOP3）と不調CR（赤字額が大きい上位5本）
   const topCR = classifiedCR.slice(0, 3);
-  const poorCR = classifiedCR.filter(cr => cr.roas < 110);
+  const poorCR = [...classifiedCR]
+    .filter(cr => cr.profit < 0)
+    .sort((a, b) => a.profit - b.profit)
+    .slice(0, 5);
 
   // フィルター・ソート適用後のデータ
   const filteredAndSortedCreatives = useMemo(() => {

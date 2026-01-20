@@ -168,9 +168,12 @@ export function getTopCreatives(creatives: CreativeData[], count: number = 3): C
     .slice(0, count);
 }
 
-// 不調CR（赤字・トントン）を取得
-export function getPoorCreatives(creatives: CreativeData[]): CreativeData[] {
-  return creatives.filter(c => c.roas < 110); // ROAS 110%未満
+// 不調CR（赤字額が大きい上位5本）を取得
+export function getPoorCreatives(creatives: CreativeData[], count: number = 5): CreativeData[] {
+  return [...creatives]
+    .filter(c => c.profit < 0)              // 赤字のみ抽出
+    .sort((a, b) => a.profit - b.profit)    // 赤字額が大きい順（利益が小さい順）
+    .slice(0, count);
 }
 
 // 数値フォーマット
