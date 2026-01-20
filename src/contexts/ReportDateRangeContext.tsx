@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode } from 'react';
 import {
   startOfDay,
   endOfDay,
@@ -102,30 +102,34 @@ const STORAGE_KEYS = {
   customTo: 'report-date-custom-to',
 };
 
+const getInitialPreset = (): DateRangePreset => {
+  if (typeof window === 'undefined') return 'last30days';
+  const savedPreset = localStorage.getItem(STORAGE_KEYS.preset) as DateRangePreset | null;
+  if (savedPreset && PRESET_LABELS[savedPreset]) {
+    return savedPreset;
+  }
+  return 'last30days';
+};
+
+const getInitialCustomRange = (): SelectedDateRange | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  const savedCustomFrom = localStorage.getItem(STORAGE_KEYS.customFrom);
+  const savedCustomTo = localStorage.getItem(STORAGE_KEYS.customTo);
+  if (savedCustomFrom && savedCustomTo) {
+    return {
+      from: new Date(savedCustomFrom),
+      to: new Date(savedCustomTo),
+    };
+  }
+  return undefined;
+};
+
 // Provider
 export function ReportDateRangeProvider({ children }: { children: ReactNode }) {
-  const [preset, setPreset] = useState<DateRangePreset>('last30days');
-  const [customRange, setCustomRange] = useState<SelectedDateRange | undefined>(undefined);
-
-  // LocalStorageから読み込み
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const savedPreset = localStorage.getItem(STORAGE_KEYS.preset) as DateRangePreset | null;
-    const savedCustomFrom = localStorage.getItem(STORAGE_KEYS.customFrom);
-    const savedCustomTo = localStorage.getItem(STORAGE_KEYS.customTo);
-
-    if (savedPreset && PRESET_LABELS[savedPreset]) {
-      setPreset(savedPreset);
-    }
-
-    if (savedCustomFrom && savedCustomTo) {
-      setCustomRange({
-        from: new Date(savedCustomFrom),
-        to: new Date(savedCustomTo),
-      });
-    }
-  }, []);
+  const [preset, setPreset] = useState<DateRangePreset>(() => getInitialPreset());
+  const [customRange, setCustomRange] = useState<SelectedDateRange | undefined>(
+    () => getInitialCustomRange()
+  );
 
   // 日付範囲を設定
   const setReportDateRange = (newPreset: DateRangePreset, newCustomRange?: SelectedDateRange) => {

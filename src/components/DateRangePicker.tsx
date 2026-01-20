@@ -80,16 +80,14 @@ export default function DateRangePicker({ value, customRange, onChange }: DateRa
     setModalPosition({ top, left });
   }, []);
 
-  // モーダル開閉時の処理
-  useEffect(() => {
-    if (isOpen) {
-      updateModalPosition();
-      setTempPreset(value);
-      setTempRange(customRange ? { from: customRange.from, to: customRange.to } : undefined);
-      // 開いた時は今月を表示
-      setDisplayMonth(new Date());
-    }
-  }, [isOpen, value, customRange, updateModalPosition]);
+  const openModal = useCallback(() => {
+    updateModalPosition();
+    setTempPreset(value);
+    setTempRange(customRange ? { from: customRange.from, to: customRange.to } : undefined);
+    // 開いた時は今月を表示
+    setDisplayMonth(new Date());
+    setIsOpen(true);
+  }, [updateModalPosition, value, customRange]);
 
   // ESCキーで閉じる
   useEffect(() => {
@@ -171,7 +169,7 @@ export default function DateRangePicker({ value, customRange, onChange }: DateRa
       {/* トリガーボタン（コンパクト版） */}
       <button
         ref={buttonRef}
-        onClick={() => setIsOpen(true)}
+        onClick={openModal}
         className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-md hover:border-[#0b7f7b] transition-all text-xs"
       >
         <Calendar className="w-3.5 h-3.5 text-gray-400" />

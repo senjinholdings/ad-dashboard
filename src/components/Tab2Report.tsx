@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { CreativeData, AggregatedCreativeData } from '@/types';
 import { calculateSummary } from '@/utils/csvParser';
 import { loadCreatives } from '@/utils/storage';
@@ -34,8 +34,10 @@ const TABLE_HEADERS: {
 ];
 
 export default function Tab2Report() {
-  const [creatives, setCreatives] = useState<CreativeData[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [creatives] = useState<CreativeData[]>(() => loadCreatives());
+  const [lastUpdated] = useState<string | null>(
+    () => loadSpreadsheetConfig()?.lastUpdated ?? null
+  );
 
   // フィルター・ソート状態
   const [filters, setFilters] = useState<Record<string, MetricFilterConfig | null>>({});
@@ -44,16 +46,6 @@ export default function Tab2Report() {
 
   // 日付範囲フィルター（Context）
   const { preset, customRange, range, setReportDateRange } = useReportDateRange();
-
-  useEffect(() => {
-    // localStorageからデータを読み込み
-    setCreatives(loadCreatives());
-
-    const config = loadSpreadsheetConfig();
-    if (config?.lastUpdated) {
-      setLastUpdated(config.lastUpdated);
-    }
-  }, []);
 
   // 日付文字列をDateに変換してフィルタリング
   const parseCreativeDate = (dateStr: string): Date | null => {

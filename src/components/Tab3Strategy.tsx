@@ -1,18 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { StrategyData, defaultStrategyData } from '@/types';
+import { useState } from 'react';
+import { StrategyData } from '@/types';
 import { loadStrategy, saveStrategy } from '@/utils/storage';
 
 const MEDIA_OPTIONS = ['Meta', 'TikTok', 'YouTube', 'Google', 'X (Twitter)', 'LINE'];
 
 export default function Tab3Strategy() {
-  const [data, setData] = useState<StrategyData>(defaultStrategyData);
+  const [data, setData] = useState<StrategyData>(() => loadStrategy());
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setData(loadStrategy());
-  }, []);
 
   const handleChange = (field: keyof StrategyData, value: unknown) => {
     setData(prev => ({ ...prev, [field]: value }));

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { loadSpreadsheetConfig } from '@/utils/spreadsheet';
 
 // 前提条件データの型
@@ -57,19 +57,11 @@ function loadPremiseData(): PremiseSheetData | null {
 const isUrl = (str: string) => str.startsWith('http://') || str.startsWith('https://');
 
 export default function Tab1Premise() {
-  const [premiseData, setPremiseData] = useState<PremiseSheetData>(defaultPremiseSheetData);
-  const [isConnected, setIsConnected] = useState(false);
+  const [premiseData] = useState<PremiseSheetData>(
+    () => loadPremiseData() ?? defaultPremiseSheetData
+  );
+  const [isConnected] = useState(() => !!loadSpreadsheetConfig());
   const [popupImage, setPopupImage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const savedPremise = loadPremiseData();
-    if (savedPremise) {
-      setPremiseData(savedPremise);
-    }
-
-    const savedConfig = loadSpreadsheetConfig();
-    setIsConnected(!!savedConfig);
-  }, []);
 
   // 接続されていない場合
   if (!isConnected) {

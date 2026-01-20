@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   Cell,
+  Tooltip,
 } from 'recharts';
 import { CreativeData } from '@/types';
 import { formatCurrency } from '@/utils/csvParser';
@@ -52,9 +53,11 @@ interface TooltipState {
 export default function DailyProfitChart({ data }: DailyProfitChartProps) {
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
   const [isTooltipPinned, setIsTooltipPinned] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTooltipPinnedRef = useRef(false);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -68,20 +71,22 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
   const scheduleHide = useCallback(() => {
     clearHideTimeout();
     hideTimeoutRef.current = setTimeout(() => {
-      if (!isTooltipPinned) {
+      if (!isTooltipPinnedRef.current) {
         setTooltipState(null);
       }
-    }, 200);
-  }, [clearHideTimeout, isTooltipPinned]);
+    }, 400);
+  }, [clearHideTimeout]);
 
-  // チャートのマウスムーブ
+  // チャートのマウスムーブ - chartDataはuseMemoで後に定義されるため、関数内で参照
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleChartMouseMove = useCallback((state: any) => {
-    if (isTooltipPinned) return; // ピン留め中は更新しない
+  const handleChartMouseMove = useCallback((state: any, data: DailyData[]) => {
+    if (isTooltipPinnedRef.current) return; // ピン留め中は更新しない
 
-    if (state?.activePayload && state.activePayload.length > 0 && state?.activeCoordinate) {
+    // activeTooltipIndexを使ってデータを取得
+    const index = state?.activeTooltipIndex;
+    if (index !== undefined && index >= 0 && index < data.length && state?.activeCoordinate) {
       clearHideTimeout();
-      const dayData = state.activePayload[0].payload as DailyData;
+      const dayData = data[index];
       setTooltipState({
         dayData,
         label: dayData.displayDate,
@@ -89,23 +94,25 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
         y: state.activeCoordinate.y,
       });
     }
-  }, [clearHideTimeout, isTooltipPinned]);
+  }, [clearHideTimeout]);
 
   // チャートからマウスが離れた
   const handleChartMouseLeave = useCallback(() => {
-    if (!isTooltipPinned) {
+    if (!isTooltipPinnedRef.current) {
       scheduleHide();
     }
-  }, [scheduleHide, isTooltipPinned]);
+  }, [scheduleHide]);
 
   // ツールチップにマウスが入った
   const handleTooltipMouseEnter = useCallback(() => {
     clearHideTimeout();
+    isTooltipPinnedRef.current = true;
     setIsTooltipPinned(true);
   }, [clearHideTimeout]);
 
   // ツールチップからマウスが離れた
   const handleTooltipMouseLeave = useCallback(() => {
+    isTooltipPinnedRef.current = false;
     setIsTooltipPinned(false);
     scheduleHide();
   }, [scheduleHide]);
@@ -116,6 +123,35 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const element = chartContainerRef.current;
+    if (!element) return;
+
+    if (typeof ResizeObserver === 'undefined') {
+      const frameId = requestAnimationFrame(() => {
+        setContainerWidth(element.offsetWidth);
+      });
+      return () => cancelAnimationFrame(frameId);
+    }
+
+    let frameId: number | null = null;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      if (frameId) cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() => {
+        setContainerWidth(entry.contentRect.width);
+      });
+    });
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+      if (frameId) cancelAnimationFrame(frameId);
     };
   }, []);
 
@@ -159,12 +195,8 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
       colorMap[name] = COLORS[index % COLORS.length];
     });
 
-    // 各日の最大スロット数を追跡
-    let maxPosSlots = 0;
-    let maxNegSlots = 0;
-
     // チャートデータを作成
-    const chartData: DailyData[] = Array.from(dailyMap.entries())
+    const processed = Array.from(dailyMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, dayData]) => {
         const result: DailyData = {
@@ -186,9 +218,6 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
         const negatives = dayCreatives
           .filter(c => c.profit < 0)
           .sort((a, b) => b.profit - a.profit);
-
-        maxPosSlots = Math.max(maxPosSlots, positives.length);
-        maxNegSlots = Math.max(maxNegSlots, negatives.length);
 
         positives.forEach((c, i) => {
           const slotIndex = positives.length - 1 - i;
@@ -217,14 +246,28 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
 
         result.total = dayCreatives.reduce((sum, c) => sum + c.profit, 0);
 
-        return result;
+        return {
+          day: result,
+          posCount: positives.length,
+          negCount: negatives.length,
+        };
       });
+
+    const chartData = processed.map(item => item.day);
+    const maxPosSlots = Math.min(
+      processed.reduce((max, item) => Math.max(max, item.posCount), 0),
+      MAX_SLOTS
+    );
+    const maxNegSlots = Math.min(
+      processed.reduce((max, item) => Math.max(max, item.negCount), 0),
+      MAX_SLOTS
+    );
 
     return {
       chartData,
       creativeCount: creativeSet.size,
-      maxPosSlots: Math.min(maxPosSlots, MAX_SLOTS),
-      maxNegSlots: Math.min(maxNegSlots, MAX_SLOTS),
+      maxPosSlots,
+      maxNegSlots,
     };
   }, [data]);
 
@@ -302,14 +345,17 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
         </div>
       </div>
 
-      <div className="h-[400px] relative" ref={chartContainerRef}>
+      <div
+        className="h-[400px] relative"
+        ref={chartContainerRef}
+        onMouseLeave={handleChartMouseLeave}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
             stackOffset="sign"
-            onMouseMove={handleChartMouseMove}
-            onMouseLeave={handleChartMouseLeave}
+            onMouseMove={(state) => handleChartMouseMove(state, chartData)}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis
@@ -326,6 +372,11 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
               tickLine={{ stroke: '#d1d5db' }}
             />
             <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
+            <Tooltip
+              content={() => null}
+              cursor={false}
+              isAnimationActive={false}
+            />
 
             {posSlots.map((slotIndex) => (
               <Bar
@@ -373,16 +424,23 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
         {tooltipState && (
           <div
             ref={tooltipRef}
-            className="absolute z-50 border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white"
+            className="absolute z-50"
             style={{
-              left: Math.min(tooltipState.x + 15, (chartContainerRef.current?.offsetWidth || 600) - 280),
+              left: Math.min(tooltipState.x, (containerWidth || 600) - 300),
               top: Math.max(10, Math.min(tooltipState.y - 100, 200)),
-              minWidth: '260px',
-              maxWidth: '320px',
             }}
             onMouseEnter={handleTooltipMouseEnter}
             onMouseLeave={handleTooltipMouseLeave}
           >
+            {/* 左側の透明なホバー領域 */}
+            <div className="absolute left-0 top-0 w-5 h-full" />
+            <div
+              className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white ml-5"
+              style={{
+                minWidth: '260px',
+                maxWidth: '320px',
+              }}
+            >
             <div className="flex items-center justify-between mb-2">
               <p className="font-semibold text-gray-900">{tooltipState.label}</p>
               {isTooltipPinned && (
@@ -410,6 +468,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
               <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
                 {formatCurrency(tooltipTotal)}
               </span>
+            </div>
             </div>
           </div>
         )}

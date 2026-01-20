@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CreativeData } from '@/types';
 import { loadCreatives, saveCreatives } from '@/utils/storage';
 import { assignCreativeStatus } from '@/utils/csvParser';
