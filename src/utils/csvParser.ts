@@ -87,6 +87,7 @@ export function calculateCreativeData(
     return {
       id: `creative-${index}-${Date.now()}`,
       date: raw.reportStartDate || '',
+      accountName: raw.accountName || '',
       adName: raw.adName || '',
       adSetName: raw.adSetName || '',
       projectName: matchedProject?.name || '未設定',

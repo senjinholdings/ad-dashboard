@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import { ReportDateRangeProvider } from "@/contexts/ReportDateRangeContext";
+import { AccountProvider } from "@/contexts/AccountContext";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -28,9 +29,11 @@ export default function RootLayout({
         />
       </head>
       <body className={`${manrope.variable} antialiased font-sans`}>
-        <ReportDateRangeProvider>
-          {children}
-        </ReportDateRangeProvider>
+        <AccountProvider>
+          <ReportDateRangeProvider>
+            {children}
+          </ReportDateRangeProvider>
+        </AccountProvider>
       </body>
     </html>
   );

@@ -92,6 +92,7 @@ export interface SpreadsheetAdData extends RawAdData {
   profit: number;     // 粗利
   roas: number;       // ROAS
   projectName: string; // 商材名
+  // accountNameはRawAdDataから継承
 }
 
 // CSVカラム名のマッピング（スプレッドシート形式対応）
@@ -100,6 +101,9 @@ const COLUMN_MAP: { [key: string]: keyof SpreadsheetAdData } = {
   '日付': 'reportStartDate',
   'レポート開始日': 'reportStartDate',
   'レポート終了日': 'reportEndDate',
+  // 広告アカウント名
+  '広告アカウント名': 'accountName',
+  'アカウント名': 'accountName',
   // 広告名
   '広告名': 'adName',
   '広告の名前': 'adName',
@@ -169,6 +173,7 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
       return {
         reportStartDate: mapped.reportStartDate || '',
         reportEndDate: mapped.reportEndDate || '',
+        accountName: mapped.accountName || '',
         adName: mapped.adName || '',
         adSetName: mapped.adSetName || '',
         impressions: mapped.impressions || 0,

@@ -9,6 +9,7 @@ export interface Project {
 export interface RawAdData {
   reportStartDate: string;
   reportEndDate: string;
+  accountName: string; // 広告アカウント名
   adName: string;
   adSetName: string;
   impressions: number;
@@ -22,6 +23,7 @@ export interface RawAdData {
 export interface CreativeData {
   id: string;
   date: string; // 日付
+  accountName: string; // 広告アカウント名
   adName: string;
   adSetName: string;
   projectName: string;

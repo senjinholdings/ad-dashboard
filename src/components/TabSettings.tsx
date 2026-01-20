@@ -176,6 +176,7 @@ export default function TabSettings() {
         return {
           id: `creative-${index}-${Date.now()}`,
           date: row.reportStartDate || '',
+          accountName: row.accountName || '',
           adName: row.adName || '',
           adSetName: row.adSetName || '',
           projectName: row.projectName || '未設定',
