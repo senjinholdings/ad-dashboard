@@ -1,13 +1,12 @@
 'use client';
 
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
   ReferenceLine,
   Cell,
@@ -43,98 +42,82 @@ interface DailyData {
   [key: string]: string | number | SlotData | undefined;
 }
 
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    dataKey: string;
-    value: number;
-    payload: DailyData;
-  }>;
-  label?: string;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
-}
-
-function CustomTooltip({ active, payload, label, onMouseEnter, onMouseLeave }: CustomTooltipProps) {
-  if (!active || !payload || !payload.length) return null;
-
-  const dayData = payload[0]?.payload;
-  if (!dayData) return null;
-
-  // スロットデータを収集
-  const items: SlotData[] = [];
-
-  for (let i = 0; i < MAX_SLOTS; i++) {
-    const posData = dayData[`pos_${i}_data`] as SlotData | undefined;
-    if (posData && posData.value !== 0) {
-      items.push(posData);
-    }
-    const negData = dayData[`neg_${i}_data`] as SlotData | undefined;
-    if (negData && negData.value !== 0) {
-      items.push(negData);
-    }
-  }
-
-  // 利益順でソート（大きい順）。同額はスタック順に合わせる
-  items.sort((a, b) => {
-    if (a.value !== b.value) return b.value - a.value;
-    const aRank = a.side === 'pos' ? -a.slotIndex : a.slotIndex;
-    const bRank = b.side === 'pos' ? -b.slotIndex : b.slotIndex;
-    return aRank - bRank;
-  });
-
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-
-  return (
-    <div
-      className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 max-w-sm"
-      style={{ backgroundColor: '#ffffff' }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <p className="font-semibold text-gray-900 mb-2">{label}</p>
-      <div className="space-y-1 max-h-60 overflow-y-auto">
-        {items.map((item, index) => (
-          <div key={index} className="flex items-center justify-between gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-sm shrink-0"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="text-gray-600 truncate max-w-[150px]">{item.name}</span>
-            </div>
-            <span className={`font-medium ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-              {formatCurrency(item.value)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
-        <span className="font-medium text-gray-700">合計</span>
-        <span className={`font-bold ${total >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-          {formatCurrency(total)}
-        </span>
-      </div>
-    </div>
-  );
+interface TooltipState {
+  dayData: DailyData;
+  label: string;
+  x: number;
+  y: number;
 }
 
 export default function DailyProfitChart({ data }: DailyProfitChartProps) {
-  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
-  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
+  const [isTooltipPinned, setIsTooltipPinned] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleTooltipMouseEnter = () => {
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current);
+  // ツールチップを非表示にするタイムアウトをクリア
+  const clearHideTimeout = useCallback(() => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
     }
-    setIsTooltipHovered(true);
-  };
+  }, []);
 
-  const handleTooltipMouseLeave = () => {
-    tooltipTimeoutRef.current = setTimeout(() => {
-      setIsTooltipHovered(false);
-    }, 100);
-  };
+  // ツールチップを遅延非表示
+  const scheduleHide = useCallback(() => {
+    clearHideTimeout();
+    hideTimeoutRef.current = setTimeout(() => {
+      if (!isTooltipPinned) {
+        setTooltipState(null);
+      }
+    }, 200);
+  }, [clearHideTimeout, isTooltipPinned]);
+
+  // チャートのマウスムーブ
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleChartMouseMove = useCallback((state: any) => {
+    if (isTooltipPinned) return; // ピン留め中は更新しない
+
+    if (state?.activePayload && state.activePayload.length > 0 && state?.activeCoordinate) {
+      clearHideTimeout();
+      const dayData = state.activePayload[0].payload as DailyData;
+      setTooltipState({
+        dayData,
+        label: dayData.displayDate,
+        x: state.activeCoordinate.x,
+        y: state.activeCoordinate.y,
+      });
+    }
+  }, [clearHideTimeout, isTooltipPinned]);
+
+  // チャートからマウスが離れた
+  const handleChartMouseLeave = useCallback(() => {
+    if (!isTooltipPinned) {
+      scheduleHide();
+    }
+  }, [scheduleHide, isTooltipPinned]);
+
+  // ツールチップにマウスが入った
+  const handleTooltipMouseEnter = useCallback(() => {
+    clearHideTimeout();
+    setIsTooltipPinned(true);
+  }, [clearHideTimeout]);
+
+  // ツールチップからマウスが離れた
+  const handleTooltipMouseLeave = useCallback(() => {
+    setIsTooltipPinned(false);
+    scheduleHide();
+  }, [scheduleHide]);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const { chartData, creativeCount, maxPosSlots, maxNegSlots } = useMemo(() => {
     // 日付ごと・クリエイティブごとに利益を集計
@@ -198,19 +181,17 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
         // プラスとマイナスに分離
         const positives = dayCreatives
           .filter(c => c.profit > 0)
-          .sort((a, b) => b.profit - a.profit); // 大きい順（一番上に表示）
+          .sort((a, b) => b.profit - a.profit);
 
         const negatives = dayCreatives
           .filter(c => c.profit < 0)
-          .sort((a, b) => b.profit - a.profit); // 0に近い順（-23が先、-574が後）
+          .sort((a, b) => b.profit - a.profit);
 
         maxPosSlots = Math.max(maxPosSlots, positives.length);
         maxNegSlots = Math.max(maxNegSlots, negatives.length);
 
-        // プラス側のスロット（pos_0が一番小さい利益 = 一番下、pos_Nが一番大きい = 一番上）
-        // ツールチップの表示順（利益大→小）とバーの視覚的順序（上→下）を一致させる
         positives.forEach((c, i) => {
-          const slotIndex = positives.length - 1 - i; // 逆順にスロット割り当て
+          const slotIndex = positives.length - 1 - i;
           result[`pos_${slotIndex}`] = c.profit;
           result[`pos_${slotIndex}_color`] = c.color;
           result[`pos_${slotIndex}_data`] = {
@@ -222,9 +203,6 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
           };
         });
 
-        // マイナス側のスロット
-        // Rechartsは最初に描画したバーが上（0に近い）になるため、0に近い順で描画
-        // neg_0 = 0に近い（-23）→ 上、neg_N = 最もマイナス（-574）→ 下
         negatives.forEach((c, i) => {
           result[`neg_${i}`] = c.profit;
           result[`neg_${i}_color`] = c.color;
@@ -250,6 +228,38 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
     };
   }, [data]);
 
+  // ツールチップの内容を生成
+  const tooltipItems = useMemo(() => {
+    if (!tooltipState) return [];
+
+    const items: SlotData[] = [];
+    const { dayData } = tooltipState;
+
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const posData = dayData[`pos_${i}_data`] as SlotData | undefined;
+      if (posData && posData.value !== 0) {
+        items.push(posData);
+      }
+      const negData = dayData[`neg_${i}_data`] as SlotData | undefined;
+      if (negData && negData.value !== 0) {
+        items.push(negData);
+      }
+    }
+
+    items.sort((a, b) => {
+      if (a.value !== b.value) return b.value - a.value;
+      const aRank = a.side === 'pos' ? -a.slotIndex : a.slotIndex;
+      const bRank = b.side === 'pos' ? -b.slotIndex : b.slotIndex;
+      return aRank - bRank;
+    });
+
+    return items;
+  }, [tooltipState]);
+
+  const tooltipTotal = useMemo(() => {
+    return tooltipItems.reduce((sum, item) => sum + item.value, 0);
+  }, [tooltipItems]);
+
   if (data.length === 0 || chartData.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-[#cfe7e7] p-6">
@@ -272,7 +282,6 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
     );
   }
 
-  // スロット用のBarコンポーネントを生成
   const posSlots = Array.from({ length: maxPosSlots }, (_, i) => i);
   const negSlots = Array.from({ length: maxNegSlots }, (_, i) => i);
 
@@ -293,12 +302,14 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
         </div>
       </div>
 
-      <div className="h-[400px]">
+      <div className="h-[400px] relative" ref={chartContainerRef}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
             stackOffset="sign"
+            onMouseMove={handleChartMouseMove}
+            onMouseLeave={handleChartMouseLeave}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis
@@ -314,22 +325,8 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
               tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`}
               tickLine={{ stroke: '#d1d5db' }}
             />
-            <Tooltip
-              content={
-                <CustomTooltip
-                  onMouseEnter={handleTooltipMouseEnter}
-                  onMouseLeave={handleTooltipMouseLeave}
-                />
-              }
-              wrapperStyle={{
-                zIndex: 100,
-                pointerEvents: 'auto',
-              }}
-              trigger={isTooltipHovered ? 'click' : 'hover'}
-            />
             <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
 
-            {/* プラス側のスロット（大きい利益から順に積む） */}
             {posSlots.map((slotIndex) => (
               <Bar
                 key={`pos_${slotIndex}`}
@@ -350,7 +347,6 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
               </Bar>
             ))}
 
-            {/* マイナス側のスロット（0に近い順で描画→上に配置） */}
             {negSlots.map((slotIndex) => (
               <Bar
                 key={`neg_${slotIndex}`}
@@ -372,6 +368,51 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
             ))}
           </BarChart>
         </ResponsiveContainer>
+
+        {/* カスタムツールチップ */}
+        {tooltipState && (
+          <div
+            ref={tooltipRef}
+            className="absolute z-50 border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white"
+            style={{
+              left: Math.min(tooltipState.x + 15, (chartContainerRef.current?.offsetWidth || 600) - 280),
+              top: Math.max(10, Math.min(tooltipState.y - 100, 200)),
+              minWidth: '260px',
+              maxWidth: '320px',
+            }}
+            onMouseEnter={handleTooltipMouseEnter}
+            onMouseLeave={handleTooltipMouseLeave}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-semibold text-gray-900">{tooltipState.label}</p>
+              {isTooltipPinned && (
+                <span className="text-xs text-gray-400">スクロール可</span>
+              )}
+            </div>
+            <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+              {tooltipItems.map((item, index) => (
+                <div key={index} className="flex items-center justify-between gap-4 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="w-3 h-3 rounded-sm shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-gray-600 truncate">{item.name}</span>
+                  </div>
+                  <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
+                    {formatCurrency(item.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
+              <span className="font-medium text-gray-700">合計</span>
+              <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
+                {formatCurrency(tooltipTotal)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
