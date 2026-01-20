@@ -186,6 +186,11 @@ export function formatCurrency(num: number): string {
   return `¥${formatNumber(num)}`;
 }
 
+// 通貨フォーマット（フル表記: ¥12,000）
+export function formatCurrencyFull(num: number): string {
+  return `¥${formatNumber(num)}`;
+}
+
 // パーセントフォーマット
 export function formatPercent(num: number): string {
   return `${num.toFixed(1)}%`;

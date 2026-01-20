@@ -13,7 +13,7 @@ import {
   Tooltip,
 } from 'recharts';
 import { CreativeData } from '@/types';
-import { formatCurrency } from '@/utils/csvParser';
+import { formatCurrencyFull } from '@/utils/csvParser';
 
 interface DailyProfitChartProps {
   data: CreativeData[];
@@ -458,7 +458,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
                     <span className="text-gray-600 truncate">{item.name}</span>
                   </div>
                   <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                    {formatCurrency(item.value)}
+                    {formatCurrencyFull(item.value)}
                   </span>
                 </div>
               ))}
@@ -466,7 +466,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
             <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
               <span className="font-medium text-gray-700">合計</span>
               <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                {formatCurrency(tooltipTotal)}
+                {formatCurrencyFull(tooltipTotal)}
               </span>
             </div>
             </div>
