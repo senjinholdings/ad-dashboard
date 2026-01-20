@@ -79,9 +79,9 @@ export function calculateDateRange(preset: DateRangePreset, customRange?: Select
     case 'allTime':
       return { from: new Date(2000, 0, 1), to: endOfDay(yesterday) };
     case 'custom':
-      return customRange || { from: subDays(yesterday, 29), to: endOfDay(yesterday) };
+      return customRange || { from: subDays(yesterday, 6), to: endOfDay(yesterday) };
     default:
-      return { from: subDays(yesterday, 29), to: endOfDay(yesterday) };
+      return { from: subDays(yesterday, 6), to: endOfDay(yesterday) };
   }
 }
 
@@ -103,12 +103,12 @@ const STORAGE_KEYS = {
 };
 
 const getInitialPreset = (): DateRangePreset => {
-  if (typeof window === 'undefined') return 'last30days';
+  if (typeof window === 'undefined') return 'last7days';
   const savedPreset = localStorage.getItem(STORAGE_KEYS.preset) as DateRangePreset | null;
   if (savedPreset && PRESET_LABELS[savedPreset]) {
     return savedPreset;
   }
-  return 'last30days';
+  return 'last7days';
 };
 
 const getInitialCustomRange = (): SelectedDateRange | undefined => {
