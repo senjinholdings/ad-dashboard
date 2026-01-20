@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import {
   BarChart,
   Bar,
@@ -51,9 +51,11 @@ interface CustomTooltipProps {
     payload: DailyData;
   }>;
   label?: string;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, label, onMouseEnter, onMouseLeave }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   const dayData = payload[0]?.payload;
@@ -84,7 +86,12 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   const total = items.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 max-w-sm" style={{ backgroundColor: '#ffffff' }}>
+    <div
+      className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 max-w-sm"
+      style={{ backgroundColor: '#ffffff' }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <p className="font-semibold text-gray-900 mb-2">{label}</p>
       <div className="space-y-1 max-h-60 overflow-y-auto">
         {items.map((item, index) => (
@@ -113,7 +120,23 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 export default function DailyProfitChart({ data }: DailyProfitChartProps) {
-  const { chartData, colorMap, creativeCount, maxPosSlots, maxNegSlots } = useMemo(() => {
+  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
+  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTooltipMouseEnter = () => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+    }
+    setIsTooltipHovered(true);
+  };
+
+  const handleTooltipMouseLeave = () => {
+    tooltipTimeoutRef.current = setTimeout(() => {
+      setIsTooltipHovered(false);
+    }, 100);
+  };
+
+  const { chartData, creativeCount, maxPosSlots, maxNegSlots } = useMemo(() => {
     // 日付ごと・クリエイティブごとに利益を集計
     const dailyMap = new Map<string, Map<string, number>>();
     const creativeSet = new Set<string>();
@@ -221,7 +244,6 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
 
     return {
       chartData,
-      colorMap,
       creativeCount: creativeSet.size,
       maxPosSlots: Math.min(maxPosSlots, MAX_SLOTS),
       maxNegSlots: Math.min(maxNegSlots, MAX_SLOTS),
@@ -292,7 +314,19 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
               tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`}
               tickLine={{ stroke: '#d1d5db' }}
             />
-            <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 100 }} />
+            <Tooltip
+              content={
+                <CustomTooltip
+                  onMouseEnter={handleTooltipMouseEnter}
+                  onMouseLeave={handleTooltipMouseLeave}
+                />
+              }
+              wrapperStyle={{
+                zIndex: 100,
+                pointerEvents: 'auto',
+              }}
+              trigger={isTooltipHovered ? 'click' : 'hover'}
+            />
             <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
 
             {/* プラス側のスロット（大きい利益から順に積む） */}
