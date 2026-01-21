@@ -70,42 +70,17 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
       <div className="space-y-2 text-sm">
         <div className="flex justify-between items-center">
           <span className="text-gray-500">CV数</span>
-          <div className="text-right">
-            <span className="font-medium text-gray-800">{formatNumber(data.cv)}件</span>
-            {data.cv > 0 ? (
-              <span className={`ml-2 text-xs ${data.cvVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
-                ({data.cvVsAvg.toFixed(0)}%)
-              </span>
-            ) : (
-              <span className="ml-2 text-xs text-gray-400">(CV=0)</span>
-            )}
-          </div>
+          <span className="font-medium text-gray-800">{formatNumber(data.cv)}件</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-500">利益</span>
-          <div className="text-right">
-            <span className={`font-medium ${data.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(data.profit)}
-            </span>
-            {data.cv > 0 && (
-              <span className={`ml-2 text-xs ${data.profitVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
-                ({data.profitVsAvg.toFixed(0)}%)
-              </span>
-            )}
-          </div>
+          <span className={`font-medium ${data.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {formatCurrency(data.profit)}
+          </span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-500">ROAS</span>
-          <div className="text-right">
-            <span className="font-medium text-gray-800">{formatPercent(data.roas)}</span>
-            {data.cv > 0 ? (
-              <span className={`ml-2 text-xs ${data.roasVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
-                ({data.roasVsAvg.toFixed(0)}%)
-              </span>
-            ) : (
-              <span className="ml-2 text-xs text-gray-400">(CV=0)</span>
-            )}
-          </div>
+          <span className="font-medium text-gray-800">{formatPercent(data.roas)}</span>
         </div>
         <div className="border-t border-gray-100 pt-2 mt-2">
           <div className="flex justify-between">
