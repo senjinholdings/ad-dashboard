@@ -72,27 +72,41 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
           <span className="text-gray-500">CV数</span>
           <div className="text-right">
             <span className="font-medium text-gray-800">{formatNumber(data.cv)}件</span>
-            <span className={`ml-2 text-xs ${data.cvVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
-              ({data.cvVsAvg.toFixed(0)}%)
-            </span>
+            {data.cv > 0 ? (
+              <span className={`ml-2 text-xs ${data.cvVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
+                ({data.cvVsAvg.toFixed(0)}%)
+              </span>
+            ) : (
+              <span className="ml-2 text-xs text-gray-400">(CV=0)</span>
+            )}
           </div>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-500">CPA</span>
           <div className="text-right">
-            <span className="font-medium text-gray-800">{formatCurrency(data.cpa)}</span>
-            <span className={`ml-2 text-xs ${data.cpaVsAvg <= 100 ? 'text-green-600' : 'text-red-600'}`}>
-              ({data.cpaVsAvg.toFixed(0)}%)
-            </span>
+            {data.cv > 0 ? (
+              <>
+                <span className="font-medium text-gray-800">{formatCurrency(data.cpa)}</span>
+                <span className={`ml-2 text-xs ${data.cpaVsAvg <= 100 ? 'text-green-600' : 'text-red-600'}`}>
+                  ({data.cpaVsAvg.toFixed(0)}%)
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-400">計算不能</span>
+            )}
           </div>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-500">ROAS</span>
           <div className="text-right">
             <span className="font-medium text-gray-800">{formatPercent(data.roas)}</span>
-            <span className={`ml-2 text-xs ${data.roasVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
-              ({data.roasVsAvg.toFixed(0)}%)
-            </span>
+            {data.cv > 0 ? (
+              <span className={`ml-2 text-xs ${data.roasVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
+                ({data.roasVsAvg.toFixed(0)}%)
+              </span>
+            ) : (
+              <span className="ml-2 text-xs text-gray-400">(CV=0)</span>
+            )}
           </div>
         </div>
         <div className="border-t border-gray-100 pt-2 mt-2">
@@ -151,24 +165,35 @@ function calculateBubbleSize(roas: number, avgROAS: number): number {
 
 export default function MatrixChart({ data }: MatrixChartProps) {
   const chartData = useMemo(() => {
-    // CV > 0 かつ cost > 0 のデータのみ対象
-    const validData = data.filter(c => c.cv > 0 && c.cost > 0);
+    // CV > 0 のデータ
+    const cvPositiveData = data.filter(c => c.cv > 0 && c.cost > 0);
+    // CV = 0 のデータ（赤字のもののみ）
+    const cvZeroData = data.filter(c => c.cv === 0 && c.cost > 0 && c.profit < 0);
 
-    if (validData.length === 0) {
+    if (cvPositiveData.length === 0 && cvZeroData.length === 0) {
       return {
         points: [],
         avgCV: 0,
         avgCPA: 0,
         avgROAS: 0,
-        counts: { 1: 0, 2: 0, 3: 0, 4: 0 }
+        counts: { 1: 0, 2: 0, 3: 0, 4: 0 },
+        cvZeroCount: 0
       };
     }
 
-    const avgCV = validData.reduce((sum, c) => sum + c.cv, 0) / validData.length;
-    const avgCPA = validData.reduce((sum, c) => sum + c.cpa, 0) / validData.length;
-    const avgROAS = validData.reduce((sum, c) => sum + c.roas, 0) / validData.length;
+    // CV>0の平均値を計算
+    const avgCV = cvPositiveData.length > 0
+      ? cvPositiveData.reduce((sum, c) => sum + c.cv, 0) / cvPositiveData.length
+      : 0;
+    const avgCPA = cvPositiveData.length > 0
+      ? cvPositiveData.reduce((sum, c) => sum + c.cpa, 0) / cvPositiveData.length
+      : 0;
+    const avgROAS = cvPositiveData.length > 0
+      ? cvPositiveData.reduce((sum, c) => sum + c.roas, 0) / cvPositiveData.length
+      : 0;
 
-    const points: BubbleDataItem[] = validData.map(creative => {
+    // CV>0のポイントを作成
+    const cvPositivePoints: BubbleDataItem[] = cvPositiveData.map(creative => {
       const quadrant = getQuadrant(creative.cv, creative.cpa, avgCV, avgCPA);
       const cvVsAvg = avgCV > 0 ? (creative.cv / avgCV) * 100 : 100;
       const cpaVsAvg = avgCPA > 0 ? (creative.cpa / avgCPA) * 100 : 100;
@@ -176,8 +201,8 @@ export default function MatrixChart({ data }: MatrixChartProps) {
 
       return {
         ...creative,
-        x: calculateRelativePosition(creative.cv, avgCV, false),      // CV: 右が多い
-        y: calculateRelativePosition(creative.cpa, avgCPA, true),     // CPA: 上が低い（良い）
+        x: calculateRelativePosition(creative.cv, avgCV, false),
+        y: calculateRelativePosition(creative.cpa, avgCPA, true),
         z: calculateBubbleSize(creative.roas, avgROAS),
         quadrant,
         cvVsAvg,
@@ -185,6 +210,41 @@ export default function MatrixChart({ data }: MatrixChartProps) {
         roasVsAvg,
       };
     });
+
+    // CV=0のポイントを作成（赤字額で相対評価）
+    let cvZeroPoints: BubbleDataItem[] = [];
+    if (cvZeroData.length > 0) {
+      // 赤字額（profit < 0）の最大・最小を取得
+      const losses = cvZeroData.map(c => Math.abs(c.profit));
+      const maxLoss = Math.max(...losses);
+      const minLoss = Math.min(...losses);
+      const lossRange = maxLoss - minLoss;
+
+      cvZeroPoints = cvZeroData.map(creative => {
+        // 赤字額で相対位置を計算（-100〜-50の範囲）
+        // 赤字が大きい = -100（左端）、赤字が小さい = -50（中央寄り）
+        let xPosition: number;
+        if (lossRange === 0) {
+          xPosition = -75; // 全て同じ赤字額なら中間
+        } else {
+          const lossRatio = (Math.abs(creative.profit) - minLoss) / lossRange;
+          xPosition = -50 - (lossRatio * 50); // -50〜-100の範囲
+        }
+
+        return {
+          ...creative,
+          x: xPosition,
+          y: -100, // CPA計算不能のため最下部（CPA最悪）
+          z: 0.8, // 固定サイズ（小さめ）
+          quadrant: 4 as Quadrant, // 停止検討
+          cvVsAvg: 0,
+          cpaVsAvg: Infinity,
+          roasVsAvg: 0,
+        };
+      });
+    }
+
+    const points = [...cvPositivePoints, ...cvZeroPoints];
 
     // 各象限のカウント
     const counts = {
@@ -194,13 +254,14 @@ export default function MatrixChart({ data }: MatrixChartProps) {
       4: points.filter(p => p.quadrant === 4).length,
     };
 
-    return { points, avgCV, avgCPA, avgROAS, counts };
+    return { points, avgCV, avgCPA, avgROAS, counts, cvZeroCount: cvZeroData.length };
   }, [data]);
 
-  // CV > 0 のデータがない場合
+  // CV > 0 のデータ数
   const validDataCount = data.filter(c => c.cv > 0 && c.cost > 0).length;
 
-  if (data.length === 0 || validDataCount === 0) {
+  // 表示可能なデータがない場合（CV>0もCV=0の赤字もない）
+  if (data.length === 0 || chartData.points.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-[#cfe7e7] p-6">
         <div className="flex items-center gap-3 mb-4">
@@ -275,6 +336,13 @@ export default function MatrixChart({ data }: MatrixChartProps) {
           <span className="text-gray-500">対象CR:</span>
           <span className="font-medium text-gray-800">{validDataCount}種類</span>
           <span className="text-xs text-gray-400">(CV&gt;0)</span>
+          {chartData.cvZeroCount > 0 && (
+            <>
+              <span className="text-gray-300 mx-1">+</span>
+              <span className="font-medium text-red-600">{chartData.cvZeroCount}種類</span>
+              <span className="text-xs text-gray-400">(CV=0赤字)</span>
+            </>
+          )}
         </div>
       </div>
 
