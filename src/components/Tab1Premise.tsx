@@ -159,12 +159,12 @@ export default function Tab1Premise() {
             {isLoading ? (
               <>
                 <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-                <span>読込中...</span>
+                <span>更新中...</span>
               </>
             ) : (
               <>
-                <span className="material-symbols-outlined text-lg">visibility</span>
-                <span>表示</span>
+                <span className="material-symbols-outlined text-lg">sync</span>
+                <span>更新</span>
               </>
             )}
           </button>

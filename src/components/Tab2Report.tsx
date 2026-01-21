@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CreativeData, AggregatedCreativeData } from '@/types';
-import { calculateSummary } from '@/utils/csvParser';
-import { loadCreatives } from '@/utils/storage';
-import { loadSpreadsheetConfig } from '@/utils/spreadsheet';
+import { calculateSummary, assignCreativeStatus } from '@/utils/csvParser';
+import { loadCreatives, saveCreatives } from '@/utils/storage';
+import {
+  loadSpreadsheetConfig,
+  extractSpreadsheetId,
+  fetchSpreadsheetDataByName,
+  parseSpreadsheetCsv,
+  parseCreativeMasterCsv,
+  saveSpreadsheetConfig,
+  SpreadsheetAdData,
+} from '@/utils/spreadsheet';
 import SummaryCards from './SummaryCards';
 import MatrixChart from './MatrixChart';
 import CreativeTable from './CreativeTable';
@@ -35,9 +43,14 @@ const TABLE_HEADERS: {
   { key: 'roas', label: 'ROAS', type: 'percentage', align: 'right' },
 ];
 
+// シート名（固定）
+const RAW_SHEET_NAME = 'raw';
+const CREATIVE_SHEET_NAME = 'クリエイティブ';
+
 export default function Tab2Report() {
   const [creatives, setCreatives] = useState<CreativeData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // データを読み込む（マウント時 & storageイベント時）
   useEffect(() => {
@@ -60,6 +73,81 @@ export default function Tab2Report() {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', handleFocus);
     };
+  }, []);
+
+  // スプレッドシートからデータを更新
+  const handleRefresh = useCallback(async () => {
+    const config = loadSpreadsheetConfig();
+    if (!config?.spreadsheetId) return;
+
+    setIsRefreshing(true);
+
+    try {
+      // クリエイティブマスタを取得
+      let masterCreativeNames: string[] = [];
+      try {
+        const creativeCsvText = await fetchSpreadsheetDataByName(config.spreadsheetId, CREATIVE_SHEET_NAME);
+        masterCreativeNames = parseCreativeMasterCsv(creativeCsvText);
+      } catch (err) {
+        console.warn('クリエイティブマスタの取得に失敗しました:', err);
+      }
+
+      const sortedCreativeNames = [...masterCreativeNames].sort((a, b) => b.length - a.length);
+
+      // rawシートからCSVデータを取得
+      const csvText = await fetchSpreadsheetDataByName(config.spreadsheetId, RAW_SHEET_NAME);
+      const rawData = parseSpreadsheetCsv(csvText);
+
+      // スプレッドシートデータをCreativeDataに変換
+      const calculated: CreativeData[] = rawData.map((row: SpreadsheetAdData, index: number) => {
+        let matchedCreativeName = '';
+        if (row.adName && sortedCreativeNames.length > 0) {
+          for (const name of sortedCreativeNames) {
+            if (row.adName.includes(name)) {
+              matchedCreativeName = name;
+              break;
+            }
+          }
+        }
+
+        return {
+          id: `creative-${index}-${Date.now()}`,
+          date: row.reportStartDate || '',
+          accountName: row.accountName || '',
+          personName: row.personName || '',
+          adName: row.adName || '',
+          adSetName: row.adSetName || '',
+          projectName: row.projectName || '未設定',
+          creativeName: matchedCreativeName,
+          impressions: row.impressions || 0,
+          cpm: row.cpm || 0,
+          cv: row.results || 0,
+          cpa: row.costPerResult || 0,
+          cost: row.amountSpent || 0,
+          revenue: row.revenue || 0,
+          profit: row.profit || 0,
+          roas: row.roas || 0,
+          status: 'excellent' as const,
+        };
+      });
+      const withStatus = assignCreativeStatus(calculated);
+
+      saveCreatives(withStatus);
+      setCreatives(withStatus);
+
+      // 設定を更新
+      const updatedConfig = {
+        ...config,
+        lastUpdated: new Date().toISOString(),
+      };
+      saveSpreadsheetConfig(updatedConfig);
+      setLastUpdated(updatedConfig.lastUpdated);
+
+    } catch (err) {
+      console.error('データの更新に失敗しました:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
 
   // フィルター・ソート状態
@@ -257,7 +345,7 @@ export default function Tab2Report() {
             <span className="material-symbols-outlined text-[#0b7f7b]">bar_chart</span>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-800">今週の結果報告</h2>
+            <h2 className="text-xl font-bold text-gray-800">レポート</h2>
             <p className="text-sm text-gray-500">データを「前提整理・設定」タブで読み込んでください</p>
           </div>
         </div>
@@ -283,7 +371,7 @@ export default function Tab2Report() {
             <span className="material-symbols-outlined text-[#0b7f7b]">bar_chart</span>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-800">今週の結果報告</h2>
+            <h2 className="text-xl font-bold text-gray-800">レポート</h2>
             {lastUpdated && (
               <p className="text-sm text-gray-500">
                 最終更新: {new Date(lastUpdated).toLocaleString('ja-JP')}
@@ -347,6 +435,23 @@ export default function Tab2Report() {
             customRange={customRange}
             onChange={setReportDateRange}
           />
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-[#0b7f7b] text-white rounded-lg hover:bg-[#0a6966] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            {isRefreshing ? (
+              <>
+                <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                <span>更新中...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-lg">sync</span>
+                <span>更新</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 

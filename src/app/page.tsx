@@ -7,7 +7,7 @@ import TabSettings from '@/components/TabSettings';
 
 const TABS = [
   { id: 'premise', label: '前提整理', icon: 'assignment' },
-  { id: 'report', label: '今週の結果報告', icon: 'bar_chart' },
+  { id: 'report', label: 'レポート', icon: 'bar_chart' },
   { id: 'settings', label: 'スプレッドシート連携', icon: 'settings' },
 ];
 
