@@ -8,7 +8,6 @@ import TabSettings from '@/components/TabSettings';
 const TABS = [
   { id: 'premise', label: '前提整理', icon: 'assignment' },
   { id: 'report', label: 'レポート', icon: 'bar_chart' },
-  { id: 'settings', label: 'スプレッドシート連携', icon: 'settings' },
 ];
 
 export default function Home() {
