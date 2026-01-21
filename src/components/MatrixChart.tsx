@@ -474,6 +474,23 @@ export default function MatrixChart({ data }: MatrixChartProps) {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-1 rounded text-xs text-gray-500 border border-gray-200 z-0">
           平均
         </div>
+
+        {/* CV=0エリアのラベル（下部左側） */}
+        {chartData.cvZeroCount > 0 && (
+          <div
+            className="absolute pointer-events-none z-10"
+            style={{ bottom: '50px', left: 'calc(60px + (100% - 100px) * 0.25)', transform: 'translateX(-50%)' }}
+          >
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 shadow-sm">
+              <div className="text-xs font-medium text-red-600 text-center mb-0.5">
+                CV=0 赤字CR ({chartData.cvZeroCount}種)
+              </div>
+              <div className="text-[10px] text-red-400 text-center">
+                ← 粗利低い　　粗利高い →
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
