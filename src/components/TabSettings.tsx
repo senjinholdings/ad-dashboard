@@ -15,91 +15,18 @@ import {
   SpreadsheetConfig,
   SpreadsheetAdData,
 } from '@/utils/spreadsheet';
-import Papa from 'papaparse';
 
 // シート名（固定）
 const RAW_SHEET_NAME = 'raw';
 const CREATIVE_SHEET_NAME = 'クリエイティブ';
-const PREMISE_SHEET_NAME = '前提条件';
 
-// 前提条件データの型
-interface PremiseSheetData {
-  totalAcquisitions: string;
-  clientAcquisitions: string;
-  ourROAS: string;
-  competitorROAS: string;
-  topAgency: string;
-  mainMedia: string;
-  clientPolicy: string;
-  lastWeekVerification: string;
-  marketCR1: string;
-  marketCR2: string;
-  marketCR3: string;
-  mediaStrategy: string;
-  ideaDirection: string;
-}
-
-const defaultPremiseSheetData: PremiseSheetData = {
-  totalAcquisitions: '',
-  clientAcquisitions: '',
-  ourROAS: '',
-  competitorROAS: '',
-  topAgency: '',
-  mainMedia: '',
-  clientPolicy: '',
-  lastWeekVerification: '',
-  marketCR1: '',
-  marketCR2: '',
-  marketCR3: '',
-  mediaStrategy: '',
-  ideaDirection: '',
-};
-
-// localStorage操作
+// localStorage操作（前提条件）
 const PREMISE_STORAGE_KEY = 'ad-dashboard-premise-data';
-
-function savePremiseData(data: PremiseSheetData) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(PREMISE_STORAGE_KEY, JSON.stringify(data));
-  }
-}
 
 function clearPremiseData() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(PREMISE_STORAGE_KEY);
   }
-}
-
-// CSVから前提条件データをパース（ラベルで特定）
-function parsePremiseSheetCsv(csvText: string): PremiseSheetData {
-  const result = Papa.parse<string[]>(csvText, {
-    header: false,
-    skipEmptyLines: false,
-  });
-
-  const data = { ...defaultPremiseSheetData };
-  const rows = result.data;
-
-  for (const row of rows) {
-    const label = (row[0] || '').trim();
-    const value = row[1] || '';
-
-    if (label.includes('現状の全体獲得件数')) data.totalAcquisitions = value;
-    else if (label.includes('クライアントの全体獲得件数')) data.clientAcquisitions = value;
-    else if (label.includes('弊社経由') && label.includes('ROAS')) data.ourROAS = value;
-    else if (label.includes('他社') && label.includes('ROAS')) data.competitorROAS = value;
-    else if (label.includes('TOP代理店')) data.topAgency = value;
-    else if (label.includes('獲得メイン媒体')) data.mainMedia = value;
-    else if (label.includes('クライアント方針')) data.clientPolicy = value;
-    else if (label.includes('先週何を検証')) data.lastWeekVerification = value;
-    else if (label.includes('市場の上位CR') && label.includes('1位')) data.marketCR1 = value;
-    else if (label.includes('市場の上位CR') && label.includes('2位')) data.marketCR2 = value;
-    else if (label.includes('市場の上位CR') && label.includes('3位')) data.marketCR3 = value;
-    else if (label.includes('媒体戦略')) data.mediaStrategy = value;
-    else if (label.includes('アイディアの方針')) data.ideaDirection = value;
-  }
-
-  return data;
 }
 
 export default function TabSettings() {
@@ -130,15 +57,6 @@ export default function TabSettings() {
       const spreadsheetId = extractSpreadsheetId(url);
       if (!spreadsheetId) {
         throw new Error('無効なスプレッドシートURLです。Google スプレッドシートのURLを入力してください。');
-      }
-
-      // 前提条件シートを取得
-      try {
-        const premiseCsvText = await fetchSpreadsheetDataByName(spreadsheetId, PREMISE_SHEET_NAME);
-        const premiseSheetData = parsePremiseSheetCsv(premiseCsvText);
-        savePremiseData(premiseSheetData);
-      } catch (err) {
-        console.warn('前提条件シートの取得に失敗しました:', err);
       }
 
       // クリエイティブマスタを取得
@@ -286,10 +204,6 @@ export default function TabSettings() {
                       <span className="material-symbols-outlined text-sm">palette</span>
                       {CREATIVE_SHEET_NAME}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 rounded text-xs text-green-700">
-                      <span className="material-symbols-outlined text-sm">assignment</span>
-                      {PREMISE_SHEET_NAME}
-                    </span>
                   </div>
                 </div>
               </div>
@@ -393,7 +307,7 @@ export default function TabSettings() {
               </ol>
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <p className="text-xs text-gray-500">
-                  必要なシート: 「{RAW_SHEET_NAME}」「{CREATIVE_SHEET_NAME}」「{PREMISE_SHEET_NAME}」
+                  必要なシート: 「{RAW_SHEET_NAME}」「{CREATIVE_SHEET_NAME}」
                 </p>
               </div>
             </div>

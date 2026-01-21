@@ -1,40 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { loadSpreadsheetConfig } from '@/utils/spreadsheet';
-
-// 前提条件データの型
-interface PremiseSheetData {
-  totalAcquisitions: string;
-  clientAcquisitions: string;
-  ourROAS: string;
-  competitorROAS: string;
-  topAgency: string;
-  mainMedia: string;
-  clientPolicy: string;
-  lastWeekVerification: string;
-  marketCR1: string;
-  marketCR2: string;
-  marketCR3: string;
-  mediaStrategy: string;
-  ideaDirection: string;
-}
-
-const defaultPremiseSheetData: PremiseSheetData = {
-  totalAcquisitions: '',
-  clientAcquisitions: '',
-  ourROAS: '',
-  competitorROAS: '',
-  topAgency: '',
-  mainMedia: '',
-  clientPolicy: '',
-  lastWeekVerification: '',
-  marketCR1: '',
-  marketCR2: '',
-  marketCR3: '',
-  mediaStrategy: '',
-  ideaDirection: '',
-};
+import { useState, useEffect, useMemo } from 'react';
+import {
+  loadSpreadsheetConfig,
+  fetchSpreadsheetDataByName,
+  parsePremiseSheetCsv,
+  PremiseSheetData,
+  defaultPremiseSheetData,
+} from '@/utils/spreadsheet';
+import { loadCreatives } from '@/utils/storage';
 
 // localStorage操作
 const PREMISE_STORAGE_KEY = 'ad-dashboard-premise-data';
@@ -53,15 +27,73 @@ function loadPremiseData(): PremiseSheetData | null {
   return null;
 }
 
+function savePremiseData(data: PremiseSheetData) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PREMISE_STORAGE_KEY, JSON.stringify(data));
+  }
+}
+
 // URLかどうかを判定
 const isUrl = (str: string) => str.startsWith('http://') || str.startsWith('https://');
 
 export default function Tab1Premise() {
-  const [premiseData] = useState<PremiseSheetData>(
+  const [premiseData, setPremiseData] = useState<PremiseSheetData>(
     () => loadPremiseData() ?? defaultPremiseSheetData
   );
   const [isConnected] = useState(() => !!loadSpreadsheetConfig());
   const [popupImage, setPopupImage] = useState<string | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 担当者リストを取得
+  const personNames = useMemo(() => {
+    const creatives = loadCreatives();
+    const names = new Set<string>();
+    creatives.forEach((c) => {
+      if (c.personName) {
+        names.add(c.personName);
+      }
+    });
+    return Array.from(names).sort();
+  }, []);
+
+  // 初期選択を設定
+  useEffect(() => {
+    if (personNames.length > 0 && !selectedPerson) {
+      setSelectedPerson(personNames[0]);
+    }
+  }, [personNames, selectedPerson]);
+
+  // 表示ボタンクリック時の処理
+  const handleDisplay = async () => {
+    if (!selectedPerson) {
+      setError('担当者を選択してください');
+      return;
+    }
+
+    const config = loadSpreadsheetConfig();
+    if (!config?.spreadsheetId) {
+      setError('スプレッドシートが接続されていません');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // 担当者名のシートからデータを取得
+      const csvText = await fetchSpreadsheetDataByName(config.spreadsheetId, selectedPerson);
+      const data = parsePremiseSheetCsv(csvText);
+      setPremiseData(data);
+      savePremiseData(data);
+    } catch (err) {
+      console.error('前提条件シートの取得に失敗:', err);
+      setError(`シート「${selectedPerson}」の取得に失敗しました。シート名を確認してください。`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // 接続されていない場合
   if (!isConnected) {
@@ -91,15 +123,61 @@ export default function Tab1Premise() {
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
-      <div className="flex items-center gap-3">
-        <div className="bg-blue-100 p-2 rounded-lg">
-          <span className="material-symbols-outlined text-blue-600">assignment</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-100 p-2 rounded-lg">
+            <span className="material-symbols-outlined text-blue-600">assignment</span>
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">前提整理</h2>
+            <p className="text-sm text-gray-500">スプレッドシートから取得した前提条件</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">前提整理</h2>
-          <p className="text-sm text-gray-500">スプレッドシートから取得した前提条件</p>
+
+        {/* 担当者選択UI */}
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-gray-600 font-medium">担当者:</label>
+          <select
+            value={selectedPerson}
+            onChange={(e) => setSelectedPerson(e.target.value)}
+            className="px-3 py-2 border border-[#cfe7e7] rounded-lg focus:ring-2 focus:ring-[#0b7f7b] focus:border-[#0b7f7b] transition-all text-sm min-w-[120px]"
+          >
+            {personNames.length === 0 && (
+              <option value="">担当者がありません</option>
+            )}
+            {personNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleDisplay}
+            disabled={isLoading || !selectedPerson}
+            className="flex items-center gap-2 px-4 py-2 bg-[#0b7f7b] text-white rounded-lg hover:bg-[#0a6966] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            {isLoading ? (
+              <>
+                <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                <span>読込中...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-lg">visibility</span>
+                <span>表示</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* エラー表示 */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <span className="material-symbols-outlined text-red-600">error</span>
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
 
       {/* 3カラムレイアウト */}
       <div className="grid grid-cols-3 gap-4">
