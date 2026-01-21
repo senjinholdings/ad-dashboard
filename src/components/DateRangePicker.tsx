@@ -166,17 +166,17 @@ export default function DateRangePicker({ value, customRange, onChange }: DateRa
 
   return (
     <>
-      {/* トリガーボタン（コンパクト版） */}
+      {/* トリガーボタン */}
       <button
         ref={buttonRef}
         onClick={openModal}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-md hover:border-[#0b7f7b] transition-all text-xs"
+        className="flex items-center gap-2 px-4 py-2 bg-white border border-[#cfe7e7] rounded-lg hover:border-[#0b7f7b] transition-all text-sm"
       >
-        <Calendar className="w-3.5 h-3.5 text-gray-400" />
-        <span className="font-medium text-gray-600">
+        <Calendar className="w-4 h-4 text-gray-400" />
+        <span className="font-medium text-gray-700">
           {formatDateRange(currentRange)}
         </span>
-        <ChevronDown className="w-3 h-3 text-gray-400" />
+        <ChevronDown className="w-4 h-4 text-gray-400" />
       </button>
 
       {/* モーダル */}
