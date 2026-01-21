@@ -24,6 +24,7 @@ export interface CreativeData {
   id: string;
   date: string; // 日付
   accountName: string; // 広告アカウント名
+  personName: string; // 担当者
   adName: string;
   adSetName: string;
   projectName: string;

@@ -3,6 +3,7 @@ import { Manrope } from "next/font/google";
 import "./globals.css";
 import { ReportDateRangeProvider } from "@/contexts/ReportDateRangeContext";
 import { AccountProvider } from "@/contexts/AccountContext";
+import { PersonProvider } from "@/contexts/PersonContext";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -30,9 +31,11 @@ export default function RootLayout({
       </head>
       <body className={`${manrope.variable} antialiased font-sans`}>
         <AccountProvider>
-          <ReportDateRangeProvider>
-            {children}
-          </ReportDateRangeProvider>
+          <PersonProvider>
+            <ReportDateRangeProvider>
+              {children}
+            </ReportDateRangeProvider>
+          </PersonProvider>
         </AccountProvider>
       </body>
     </html>

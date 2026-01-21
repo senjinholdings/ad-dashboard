@@ -92,6 +92,7 @@ export interface SpreadsheetAdData extends RawAdData {
   profit: number;     // 粗利
   roas: number;       // ROAS
   projectName: string; // 商材名
+  personName: string; // 担当者
   // accountNameはRawAdDataから継承
 }
 
@@ -131,6 +132,10 @@ const COLUMN_MAP: { [key: string]: keyof SpreadsheetAdData } = {
   'ROAS': 'roas',
   // 商材名
   '商材名': 'projectName',
+  // 担当者
+  '担当者': 'personName',
+  '担当': 'personName',
+  '運用者': 'personName',
 };
 
 // 数値フィールドのリスト
@@ -207,6 +212,7 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
         profit: mapped.profit || 0,
         roas: mapped.roas || 0,
         projectName: mapped.projectName || '',
+        personName: mapped.personName || '',
       } as SpreadsheetAdData;
     });
 }

@@ -88,6 +88,7 @@ export function calculateCreativeData(
       id: `creative-${index}-${Date.now()}`,
       date: raw.reportStartDate || '',
       accountName: raw.accountName || '',
+      personName: '', // CSVインポートでは担当者なし
       adName: raw.adName || '',
       adSetName: raw.adSetName || '',
       projectName: matchedProject?.name || '未設定',
