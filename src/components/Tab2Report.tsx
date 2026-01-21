@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { CreativeData, AggregatedCreativeData } from '@/types';
 import { calculateSummary } from '@/utils/csvParser';
 import { loadCreatives } from '@/utils/storage';
@@ -36,10 +36,31 @@ const TABLE_HEADERS: {
 ];
 
 export default function Tab2Report() {
-  const [creatives] = useState<CreativeData[]>(() => loadCreatives());
-  const [lastUpdated] = useState<string | null>(
-    () => loadSpreadsheetConfig()?.lastUpdated ?? null
-  );
+  const [creatives, setCreatives] = useState<CreativeData[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
+  // データを読み込む（マウント時 & storageイベント時）
+  useEffect(() => {
+    const loadData = () => {
+      setCreatives(loadCreatives());
+      setLastUpdated(loadSpreadsheetConfig()?.lastUpdated ?? null);
+    };
+
+    loadData();
+
+    // localStorageの変更を検知
+    const handleStorage = () => loadData();
+    window.addEventListener('storage', handleStorage);
+
+    // フォーカス時にも再読み込み
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   // フィルター・ソート状態
   const [filters, setFilters] = useState<Record<string, MetricFilterConfig | null>>({});
@@ -55,27 +76,41 @@ export default function Tab2Report() {
   // 担当者フィルター（Context）
   const { selectedPersons, setSelectedPersons } = usePerson();
 
-  // ユニークなアカウント名を取得
+  // ユニークなアカウント名を取得（担当者が選択されている場合は、その担当者に紐づくアカウントのみ）
   const accountNames = useMemo(() => {
     const names = new Set<string>();
     creatives.forEach(c => {
       if (c.accountName) {
-        names.add(c.accountName);
+        // 担当者が選択されている場合は、その担当者に紐づくアカウントのみ
+        if (selectedPersons.length > 0) {
+          if (selectedPersons.includes(c.personName)) {
+            names.add(c.accountName);
+          }
+        } else {
+          names.add(c.accountName);
+        }
       }
     });
     return Array.from(names).sort();
-  }, [creatives]);
+  }, [creatives, selectedPersons]);
 
-  // ユニークな担当者名を取得
+  // ユニークな担当者名を取得（アカウントが選択されている場合は、そのアカウントに紐づく担当者のみ）
   const personNames = useMemo(() => {
     const names = new Set<string>();
     creatives.forEach(c => {
       if (c.personName) {
-        names.add(c.personName);
+        // アカウントが選択されている場合は、そのアカウントに紐づく担当者のみ
+        if (selectedAccounts.length > 0) {
+          if (selectedAccounts.includes(c.accountName)) {
+            names.add(c.personName);
+          }
+        } else {
+          names.add(c.personName);
+        }
       }
     });
     return Array.from(names).sort();
-  }, [creatives]);
+  }, [creatives, selectedAccounts]);
 
   // 日付文字列をDateに変換してフィルタリング
   const parseCreativeDate = (dateStr: string): Date | null => {
@@ -103,6 +138,7 @@ export default function Tab2Report() {
     if (!creativeDate) return true;
     return isWithinInterval(creativeDate, { start: startOfDay(range.from), end: startOfDay(range.to) });
   });
+
 
   const summary = calculateSummary(filteredCreatives);
 

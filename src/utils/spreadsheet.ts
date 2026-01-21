@@ -142,7 +142,7 @@ const COLUMN_MAP: { [key: string]: keyof SpreadsheetAdData } = {
 const NUMERIC_FIELDS = ['impressions', 'cpm', 'results', 'costPerResult', 'amountSpent', 'revenue', 'profit', 'roas'];
 
 export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
-  // ヘッダーなしでパース（3行目がヘッダーのため）
+  // ヘッダーなしでパース（1行目がヘッダー）
   const result = Papa.parse<string[]>(csvText, {
     header: false,
     skipEmptyLines: true,
