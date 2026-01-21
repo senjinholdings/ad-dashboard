@@ -85,7 +85,14 @@ export default function SummaryCards({ data }: SummaryCardsProps) {
           </div>
           <div className="text-xs text-gray-500 mb-1">{card.label}</div>
           <div className={`text-2xl font-bold ${card.valueColor || 'text-gray-800'}`}>
-            {card.value}
+            {card.value.includes('万') ? (
+              <>
+                {card.value.replace('万', '')}
+                <span className="text-sm font-medium">万</span>
+              </>
+            ) : (
+              card.value
+            )}
             {card.unit && <span className="text-base font-medium ml-0.5">{card.unit}</span>}
           </div>
         </div>
