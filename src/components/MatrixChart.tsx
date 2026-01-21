@@ -25,10 +25,10 @@ interface MatrixChartProps {
 type Quadrant = 1 | 2 | 3 | 4;
 
 const QUADRANT_CONFIG = {
-  1: { name: '好調', color: '#22c55e', bgColor: '#dcfce7', position: '右上', meaning: '最高パフォーマンス', action: '予算拡大推奨' },
-  2: { name: 'CPA改善', color: '#3b82f6', bgColor: '#dbeafe', position: '右下', meaning: 'CVあるがCPA高い', action: '入札・ターゲ調整' },
-  3: { name: '拡大余地', color: '#eab308', bgColor: '#fef9c3', position: '左上', meaning: '効率良いがCV少', action: '配信拡大検討' },
-  4: { name: '停止検討', color: '#ef4444', bgColor: '#fee2e2', position: '左下', meaning: 'CV少・CPA高', action: '停止・改善検討' },
+  1: { name: '好調', color: '#22c55e', bgColor: '#dcfce7', position: '右上', meaning: 'CV多・利益多', action: '予算拡大推奨' },
+  2: { name: '利益改善', color: '#3b82f6', bgColor: '#dbeafe', position: '右下', meaning: 'CVあるが利益少', action: '単価・効率改善' },
+  3: { name: '拡大余地', color: '#eab308', bgColor: '#fef9c3', position: '左上', meaning: '利益あるがCV少', action: '配信拡大検討' },
+  4: { name: '停止検討', color: '#ef4444', bgColor: '#fee2e2', position: '左下', meaning: 'CV少・利益少', action: '停止・改善検討' },
 };
 
 interface BubbleDataItem extends AggregatedCreativeData {
@@ -37,7 +37,7 @@ interface BubbleDataItem extends AggregatedCreativeData {
   z: number;           // バブルサイズ (0.5〜2.0)
   quadrant: Quadrant;
   cvVsAvg: number;     // CV平均比 (%)
-  cpaVsAvg: number;    // CPA平均比 (%)
+  profitVsAvg: number; // 利益平均比 (%)
   roasVsAvg: number;   // ROAS平均比 (%)
 }
 
@@ -82,17 +82,15 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
           </div>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-gray-500">CPA</span>
+          <span className="text-gray-500">利益</span>
           <div className="text-right">
-            {data.cv > 0 ? (
-              <>
-                <span className="font-medium text-gray-800">{formatCurrency(data.cpa)}</span>
-                <span className={`ml-2 text-xs ${data.cpaVsAvg <= 100 ? 'text-green-600' : 'text-red-600'}`}>
-                  ({data.cpaVsAvg.toFixed(0)}%)
-                </span>
-              </>
-            ) : (
-              <span className="text-gray-400">計算不能</span>
+            <span className={`font-medium ${data.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(data.profit)}
+            </span>
+            {data.cv > 0 && (
+              <span className={`ml-2 text-xs ${data.profitVsAvg >= 100 ? 'text-green-600' : 'text-red-600'}`}>
+                ({data.profitVsAvg.toFixed(0)}%)
+              </span>
             )}
           </div>
         </div>
@@ -115,9 +113,9 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
             <span className="font-medium text-gray-800">{formatCurrency(data.cost)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">利益</span>
-            <span className={`font-medium ${data.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(data.profit)}
+            <span className="text-gray-500">CPA</span>
+            <span className="font-medium text-gray-800">
+              {data.cv > 0 ? formatCurrency(data.cpa) : '-'}
             </span>
           </div>
         </div>
@@ -127,14 +125,14 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 // 象限を判定
-function getQuadrant(cv: number, cpa: number, avgCV: number, avgCPA: number): Quadrant {
+function getQuadrant(cv: number, profit: number, avgCV: number, avgProfit: number): Quadrant {
   const hasHighCV = cv >= avgCV;
-  const hasLowCPA = cpa <= avgCPA || avgCPA === 0;
+  const hasHighProfit = profit >= avgProfit;
 
-  if (hasHighCV && hasLowCPA) return 1;  // 好調: 右上
-  if (hasHighCV && !hasLowCPA) return 2; // CPA改善: 右下
-  if (!hasHighCV && hasLowCPA) return 3; // 拡大余地: 左上
-  return 4;                               // 停止検討: 左下
+  if (hasHighCV && hasHighProfit) return 1;  // 好調: 右上
+  if (hasHighCV && !hasHighProfit) return 2; // 利益改善: 右下
+  if (!hasHighCV && hasHighProfit) return 3; // 拡大余地: 左上
+  return 4;                                   // 停止検討: 左下
 }
 
 // 相対座標を計算（-100〜100）
@@ -174,7 +172,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
       return {
         points: [],
         avgCV: 0,
-        avgCPA: 0,
+        avgProfit: 0,
         avgROAS: 0,
         counts: { 1: 0, 2: 0, 3: 0, 4: 0 },
         cvZeroCount: 0
@@ -185,8 +183,8 @@ export default function MatrixChart({ data }: MatrixChartProps) {
     const avgCV = cvPositiveData.length > 0
       ? cvPositiveData.reduce((sum, c) => sum + c.cv, 0) / cvPositiveData.length
       : 0;
-    const avgCPA = cvPositiveData.length > 0
-      ? cvPositiveData.reduce((sum, c) => sum + c.cpa, 0) / cvPositiveData.length
+    const avgProfit = cvPositiveData.length > 0
+      ? cvPositiveData.reduce((sum, c) => sum + c.profit, 0) / cvPositiveData.length
       : 0;
     const avgROAS = cvPositiveData.length > 0
       ? cvPositiveData.reduce((sum, c) => sum + c.roas, 0) / cvPositiveData.length
@@ -194,19 +192,20 @@ export default function MatrixChart({ data }: MatrixChartProps) {
 
     // CV>0のポイントを作成
     const cvPositivePoints: BubbleDataItem[] = cvPositiveData.map(creative => {
-      const quadrant = getQuadrant(creative.cv, creative.cpa, avgCV, avgCPA);
+      const quadrant = getQuadrant(creative.cv, creative.profit, avgCV, avgProfit);
       const cvVsAvg = avgCV > 0 ? (creative.cv / avgCV) * 100 : 100;
-      const cpaVsAvg = avgCPA > 0 ? (creative.cpa / avgCPA) * 100 : 100;
+      // 利益の平均比は、平均がマイナスの場合も考慮
+      const profitVsAvg = avgProfit !== 0 ? (creative.profit / avgProfit) * 100 : (creative.profit >= 0 ? 200 : 0);
       const roasVsAvg = avgROAS > 0 ? (creative.roas / avgROAS) * 100 : 100;
 
       return {
         ...creative,
         x: calculateRelativePosition(creative.cv, avgCV, false),
-        y: calculateRelativePosition(creative.cpa, avgCPA, true),
+        y: calculateRelativePosition(creative.profit, avgProfit, false), // 利益は反転しない（高いほど上）
         z: calculateBubbleSize(creative.roas, avgROAS),
         quadrant,
         cvVsAvg,
-        cpaVsAvg,
+        profitVsAvg,
         roasVsAvg,
       };
     });
@@ -238,7 +237,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
           z: 0.8, // 固定サイズ（小さめ）
           quadrant: 4 as Quadrant, // 停止検討
           cvVsAvg: 0,
-          cpaVsAvg: Infinity,
+          profitVsAvg: 0,
           roasVsAvg: 0,
         };
       });
@@ -254,7 +253,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
       4: points.filter(p => p.quadrant === 4).length,
     };
 
-    return { points, avgCV, avgCPA, avgROAS, counts, cvZeroCount: cvZeroData.length };
+    return { points, avgCV, avgProfit, avgROAS, counts, cvZeroCount: cvZeroData.length };
   }, [data]);
 
   // CV > 0 のデータ数
@@ -272,7 +271,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             <h3 className="text-lg font-semibold text-gray-800">
               パフォーマンスマトリクス
             </h3>
-            <p className="text-sm text-gray-500">CV × CPA の4象限相対評価</p>
+            <p className="text-sm text-gray-500">CV × 利益 の4象限相対評価</p>
           </div>
         </div>
         <div className="h-80 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
@@ -299,7 +298,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             <h3 className="text-lg font-semibold text-gray-800">
               パフォーマンスマトリクス
             </h3>
-            <p className="text-sm text-gray-500">CV × CPA の4象限相対評価（バブルサイズ: 相対ROAS）</p>
+            <p className="text-sm text-gray-500">CV × 利益 の4象限相対評価（バブルサイズ: 相対ROAS）</p>
           </div>
         </div>
 
@@ -325,8 +324,8 @@ export default function MatrixChart({ data }: MatrixChartProps) {
           <span className="font-medium text-gray-800">{formatNumber(chartData.avgCV)}件</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-gray-500">平均CPA:</span>
-          <span className="font-medium text-gray-800">{formatCurrency(chartData.avgCPA)}</span>
+          <span className="text-gray-500">平均利益:</span>
+          <span className={`font-medium ${chartData.avgProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(chartData.avgProfit)}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-gray-500">平均ROAS:</span>
@@ -376,7 +375,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
               }}
             />
 
-            {/* Y軸: 相対CPA（反転済み） */}
+            {/* Y軸: 相対利益 */}
             <YAxis
               type="number"
               dataKey="y"
@@ -384,7 +383,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
               tick={{ fontSize: 11, fill: '#6b7280' }}
               tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
               label={{
-                value: '← CPA高い　　CPA低い →',
+                value: '← 利益少ない　　利益多い →',
                 angle: -90,
                 position: 'left',
                 offset: 0,
@@ -457,7 +456,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             停止検討
           </span>
         </div>
-        {/* 右下: CPA改善 */}
+        {/* 右下: 利益改善 */}
         <div
           className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"
           style={{ top: 'calc(40px + (100% - 100px) * 0.75)', left: 'calc(60px + (100% - 100px) * 0.75)' }}
@@ -466,7 +465,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             className="text-4xl font-bold opacity-30"
             style={{ color: QUADRANT_CONFIG[2].color }}
           >
-            CPA改善
+            利益改善
           </span>
         </div>
 
