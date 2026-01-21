@@ -137,9 +137,9 @@ const COLUMN_MAP: { [key: string]: keyof SpreadsheetAdData } = {
 const NUMERIC_FIELDS = ['impressions', 'cpm', 'results', 'costPerResult', 'amountSpent', 'revenue', 'profit', 'roas'];
 
 export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
-  // gviz形式はヘッダーが1行目から始まる（スキップ不要）
-  const result = Papa.parse<Record<string, string>>(csvText, {
-    header: true,
+  // ヘッダーなしでパース（3行目がヘッダーのため）
+  const result = Papa.parse<string[]>(csvText, {
+    header: false,
     skipEmptyLines: true,
   });
 
@@ -147,17 +147,36 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
     console.warn('CSV parse warnings:', result.errors);
   }
 
-  return result.data
+  const rows = result.data;
+  if (rows.length < 4) {
+    // ヘッダー行(3行目) + 最低1行のデータが必要
+    return [];
+  }
+
+  // 3行目（インデックス2）がヘッダー
+  const headers = rows[2];
+  // 4行目以降がデータ
+  const dataRows = rows.slice(3);
+
+  return dataRows
     .filter((row) => {
       // 空の行をスキップ
-      const firstValue = Object.values(row)[0];
+      const firstValue = row[0];
       return firstValue && firstValue.trim() !== '';
     })
     .map((row) => {
+      // ヘッダーとデータを組み合わせてオブジェクトに変換
+      const rowObj: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        if (header && row[index] !== undefined) {
+          rowObj[header.trim()] = row[index];
+        }
+      });
+
       const mapped: Partial<SpreadsheetAdData> = {};
 
       for (const [csvCol, dataKey] of Object.entries(COLUMN_MAP)) {
-        const value = row[csvCol];
+        const value = rowObj[csvCol];
         if (value !== undefined && value !== '') {
           if (NUMERIC_FIELDS.includes(dataKey)) {
             // 数値の場合、カンマを除去してパース
