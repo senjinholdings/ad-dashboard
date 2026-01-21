@@ -55,10 +55,13 @@ export default function Home() {
 
         {/* フッター */}
         <div className="px-5 py-4 border-t border-white/20">
-          <div className="flex items-center gap-2 text-xs text-teal-100">
-            <span className="material-symbols-outlined text-sm">storage</span>
-            <span>ローカル保存</span>
-          </div>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className="flex items-center gap-2 text-xs text-teal-100 hover:text-white transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">link</span>
+            <span>スプレッドシート連携</span>
+          </button>
         </div>
       </aside>
 
