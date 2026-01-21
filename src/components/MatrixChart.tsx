@@ -25,10 +25,10 @@ interface MatrixChartProps {
 type Quadrant = 1 | 2 | 3 | 4;
 
 const QUADRANT_CONFIG = {
-  1: { name: '好調', color: '#22c55e', bgColor: '#dcfce7', position: '右上', meaning: 'CV多・利益多', action: '予算拡大推奨' },
-  2: { name: '利益改善', color: '#3b82f6', bgColor: '#dbeafe', position: '右下', meaning: 'CVあるが利益少', action: '単価・効率改善' },
-  3: { name: '拡大余地', color: '#eab308', bgColor: '#fef9c3', position: '左上', meaning: '利益あるがCV少', action: '配信拡大検討' },
-  4: { name: '停止検討', color: '#ef4444', bgColor: '#fee2e2', position: '左下', meaning: 'CV少・利益少', action: '停止・改善検討' },
+  1: { name: '好調', color: '#22c55e', bgColor: '#dcfce7', position: '右上', meaning: 'CV多・黒字', action: '予算拡大推奨' },
+  2: { name: '利益改善', color: '#3b82f6', bgColor: '#dbeafe', position: '右下', meaning: 'CV多・赤字', action: '単価・効率改善' },
+  3: { name: '拡大余地', color: '#eab308', bgColor: '#fef9c3', position: '左上', meaning: 'CV少・黒字', action: '配信拡大検討' },
+  4: { name: '停止検討', color: '#ef4444', bgColor: '#fee2e2', position: '左下', meaning: 'CV少・赤字', action: '停止・改善検討' },
 };
 
 interface BubbleDataItem extends AggregatedCreativeData {
@@ -99,15 +99,15 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   );
 }
 
-// 象限を判定
-function getQuadrant(cv: number, profit: number, avgCV: number, avgProfit: number): Quadrant {
+// 象限を判定（黒字/赤字で上下、CV平均で左右）
+function getQuadrant(cv: number, profit: number, avgCV: number): Quadrant {
   const hasHighCV = cv >= avgCV;
-  const hasHighProfit = profit >= avgProfit;
+  const isProfit = profit >= 0; // 黒字かどうか
 
-  if (hasHighCV && hasHighProfit) return 1;  // 好調: 右上
-  if (hasHighCV && !hasHighProfit) return 2; // 利益改善: 右下
-  if (!hasHighCV && hasHighProfit) return 3; // 拡大余地: 左上
-  return 4;                                   // 停止検討: 左下
+  if (hasHighCV && isProfit) return 1;  // 好調: 右上（CV多・黒字）
+  if (hasHighCV && !isProfit) return 2; // 利益改善: 右下（CV多・赤字）
+  if (!hasHighCV && isProfit) return 3; // 拡大余地: 左上（CV少・黒字）
+  return 4;                              // 停止検討: 左下（CV少・赤字）
 }
 
 // 相対座標を計算（-100〜100）
@@ -147,10 +147,11 @@ export default function MatrixChart({ data }: MatrixChartProps) {
       return {
         points: [],
         avgCV: 0,
-        avgProfit: 0,
         avgROAS: 0,
         counts: { 1: 0, 2: 0, 3: 0, 4: 0 },
-        cvZeroCount: 0
+        cvZeroCount: 0,
+        profitCount: 0,
+        lossCount: 0
       };
     }
 
@@ -158,25 +159,55 @@ export default function MatrixChart({ data }: MatrixChartProps) {
     const avgCV = cvPositiveData.length > 0
       ? cvPositiveData.reduce((sum, c) => sum + c.cv, 0) / cvPositiveData.length
       : 0;
-    const avgProfit = cvPositiveData.length > 0
-      ? cvPositiveData.reduce((sum, c) => sum + c.profit, 0) / cvPositiveData.length
-      : 0;
     const avgROAS = cvPositiveData.length > 0
       ? cvPositiveData.reduce((sum, c) => sum + c.roas, 0) / cvPositiveData.length
       : 0;
 
+    // 黒字/赤字のデータを分離
+    const profitableData = cvPositiveData.filter(c => c.profit >= 0);
+    const lossData = cvPositiveData.filter(c => c.profit < 0);
+
+    // 黒字グループの最大・最小利益
+    const maxProfit = profitableData.length > 0 ? Math.max(...profitableData.map(c => c.profit)) : 0;
+    const minProfitInProfitable = profitableData.length > 0 ? Math.min(...profitableData.map(c => c.profit)) : 0;
+
+    // 赤字グループの最大・最小損失
+    const maxLoss = lossData.length > 0 ? Math.max(...lossData.map(c => c.profit)) : 0; // 0に近い方
+    const minLoss = lossData.length > 0 ? Math.min(...lossData.map(c => c.profit)) : 0; // 大きな赤字
+
     // CV>0のポイントを作成
     const cvPositivePoints: BubbleDataItem[] = cvPositiveData.map(creative => {
-      const quadrant = getQuadrant(creative.cv, creative.profit, avgCV, avgProfit);
+      const quadrant = getQuadrant(creative.cv, creative.profit, avgCV);
       const cvVsAvg = avgCV > 0 ? (creative.cv / avgCV) * 100 : 100;
-      // 利益の平均比は、平均がマイナスの場合も考慮
-      const profitVsAvg = avgProfit !== 0 ? (creative.profit / avgProfit) * 100 : (creative.profit >= 0 ? 200 : 0);
+      const profitVsAvg = 0; // 使用しない
       const roasVsAvg = avgROAS > 0 ? (creative.roas / avgROAS) * 100 : 100;
+
+      // Y座標: 黒字なら0〜100、赤字なら-100〜0で相対評価
+      let yPosition: number;
+      if (creative.profit >= 0) {
+        // 黒字: 0〜100の範囲で相対評価
+        const profitRange = maxProfit - minProfitInProfitable;
+        if (profitRange === 0) {
+          yPosition = 50; // 全て同じ利益なら中間
+        } else {
+          const ratio = (creative.profit - minProfitInProfitable) / profitRange;
+          yPosition = 5 + ratio * 90; // 5〜95の範囲
+        }
+      } else {
+        // 赤字: -100〜0の範囲で相対評価
+        const lossRange = maxLoss - minLoss;
+        if (lossRange === 0) {
+          yPosition = -50; // 全て同じ赤字なら中間
+        } else {
+          const ratio = (creative.profit - minLoss) / lossRange;
+          yPosition = -95 + ratio * 90; // -95〜-5の範囲
+        }
+      }
 
       return {
         ...creative,
         x: calculateRelativePosition(creative.cv, avgCV, false),
-        y: calculateRelativePosition(creative.profit, avgProfit, false), // 利益は反転しない（高いほど上）
+        y: yPosition,
         z: calculateBubbleSize(creative.roas, avgROAS),
         quadrant,
         cvVsAvg,
@@ -228,7 +259,11 @@ export default function MatrixChart({ data }: MatrixChartProps) {
       4: points.filter(p => p.quadrant === 4).length,
     };
 
-    return { points, avgCV, avgProfit, avgROAS, counts, cvZeroCount: cvZeroData.length };
+    // 黒字/赤字の件数
+    const profitCount = points.filter(p => p.profit >= 0).length;
+    const lossCount = points.filter(p => p.profit < 0).length;
+
+    return { points, avgCV, avgROAS, counts, cvZeroCount: cvZeroData.length, profitCount, lossCount };
   }, [data]);
 
   // CV > 0 のデータ数
@@ -299,8 +334,12 @@ export default function MatrixChart({ data }: MatrixChartProps) {
           <span className="font-medium text-gray-800">{formatNumber(chartData.avgCV)}件</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-gray-500">平均利益:</span>
-          <span className={`font-medium ${chartData.avgProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(chartData.avgProfit)}</span>
+          <span className="text-gray-500">黒字:</span>
+          <span className="font-medium text-green-600">{chartData.profitCount}種</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">赤字:</span>
+          <span className="font-medium text-red-600">{chartData.lossCount}種</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-gray-500">平均ROAS:</span>
@@ -350,7 +389,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
               }}
             />
 
-            {/* Y軸: 相対利益 */}
+            {/* Y軸: 黒字/赤字 */}
             <YAxis
               type="number"
               dataKey="y"
@@ -358,7 +397,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
               tick={{ fontSize: 11, fill: '#6b7280' }}
               tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
               label={{
-                value: '← 利益少ない　　利益多い →',
+                value: '← 赤字　　　　黒字 →',
                 angle: -90,
                 position: 'left',
                 offset: 0,
@@ -444,9 +483,9 @@ export default function MatrixChart({ data }: MatrixChartProps) {
           </span>
         </div>
 
-        {/* 中央のラベル */}
+        {/* 中央のラベル（横線=損益分岐、縦線=CV平均） */}
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-1 rounded text-xs text-gray-500 border border-gray-200 z-0">
-          平均
+          CV平均 / 損益分岐
         </div>
 
         {/* CV=0エリアのラベル（左端） */}
