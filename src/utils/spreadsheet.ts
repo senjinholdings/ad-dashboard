@@ -148,15 +148,15 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
   }
 
   const rows = result.data;
-  if (rows.length < 4) {
-    // ヘッダー行(3行目) + 最低1行のデータが必要
+  if (rows.length < 2) {
+    // ヘッダー行 + 最低1行のデータが必要
     return [];
   }
 
-  // 3行目（インデックス2）がヘッダー
-  const headers = rows[2];
-  // 4行目以降がデータ
-  const dataRows = rows.slice(3);
+  // 1行目（インデックス0）がヘッダー
+  const headers = rows[0];
+  // 2行目以降がデータ
+  const dataRows = rows.slice(1);
 
   return dataRows
     .filter((row) => {
@@ -165,25 +165,28 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
       return firstValue && firstValue.trim() !== '';
     })
     .map((row) => {
-      // ヘッダーとデータを組み合わせてオブジェクトに変換
-      const rowObj: Record<string, string> = {};
-      headers.forEach((header, index) => {
-        if (header && row[index] !== undefined) {
-          rowObj[header.trim()] = row[index];
-        }
-      });
-
+      // ヘッダーとデータを組み合わせてオブジェクトに変換（部分一致対応）
       const mapped: Partial<SpreadsheetAdData> = {};
 
       for (const [csvCol, dataKey] of Object.entries(COLUMN_MAP)) {
-        const value = rowObj[csvCol];
-        if (value !== undefined && value !== '') {
-          if (NUMERIC_FIELDS.includes(dataKey)) {
-            // 数値の場合、カンマを除去してパース
-            const numValue = parseFloat(String(value).replace(/,/g, '')) || 0;
-            (mapped as Record<string, unknown>)[dataKey] = numValue;
-          } else {
-            (mapped as Record<string, unknown>)[dataKey] = value;
+        // ヘッダーの部分一致でカラムを検索
+        const headerIndex = headers.findIndex((h) => {
+          if (!h) return false;
+          const trimmedHeader = h.trim();
+          // 完全一致または部分一致
+          return trimmedHeader === csvCol || trimmedHeader.includes(csvCol) || csvCol.includes(trimmedHeader);
+        });
+
+        if (headerIndex !== -1 && row[headerIndex] !== undefined) {
+          const value = row[headerIndex];
+          if (value !== '') {
+            if (NUMERIC_FIELDS.includes(dataKey)) {
+              // 数値の場合、カンマを除去してパース
+              const numValue = parseFloat(String(value).replace(/,/g, '')) || 0;
+              (mapped as Record<string, unknown>)[dataKey] = numValue;
+            } else {
+              (mapped as Record<string, unknown>)[dataKey] = value;
+            }
           }
         }
       }
