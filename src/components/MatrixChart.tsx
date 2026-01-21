@@ -211,30 +211,30 @@ export default function MatrixChart({ data }: MatrixChartProps) {
       };
     });
 
-    // CV=0のポイントを作成（赤字額で相対評価）
+    // CV=0のポイントを作成（粗利で縦方向に相対評価）
     let cvZeroPoints: BubbleDataItem[] = [];
     if (cvZeroData.length > 0) {
-      // 赤字額（profit < 0）の最大・最小を取得
-      const losses = cvZeroData.map(c => Math.abs(c.profit));
-      const maxLoss = Math.max(...losses);
-      const minLoss = Math.min(...losses);
-      const lossRange = maxLoss - minLoss;
+      // 粗利（profit < 0）の最大・最小を取得
+      const profits = cvZeroData.map(c => c.profit);
+      const maxProfit = Math.max(...profits); // 最も0に近い（赤字が小さい）
+      const minProfit = Math.min(...profits); // 最も負（赤字が大きい）
+      const profitRange = maxProfit - minProfit;
 
       cvZeroPoints = cvZeroData.map(creative => {
-        // 赤字額で相対位置を計算（-100〜-50の範囲）
-        // 赤字が大きい = -100（左端）、赤字が小さい = -50（中央寄り）
-        let xPosition: number;
-        if (lossRange === 0) {
-          xPosition = -75; // 全て同じ赤字額なら中間
+        // 粗利で縦方向の相対位置を計算（-100〜-50の範囲）
+        // 粗利が高い（0に近い）= -50（上寄り）、粗利が低い（大きな赤字）= -100（下端）
+        let yPosition: number;
+        if (profitRange === 0) {
+          yPosition = -75; // 全て同じ粗利なら中間
         } else {
-          const lossRatio = (Math.abs(creative.profit) - minLoss) / lossRange;
-          xPosition = -50 - (lossRatio * 50); // -50〜-100の範囲
+          const profitRatio = (creative.profit - minProfit) / profitRange;
+          yPosition = -100 + (profitRatio * 50); // -100〜-50の範囲
         }
 
         return {
           ...creative,
-          x: xPosition,
-          y: -100, // CPA計算不能のため最下部（CPA最悪）
+          x: -95, // CV=0なので左端付近に固定（-100だと端で切れるため）
+          y: yPosition, // 粗利で縦方向にプロット
           z: 0.8, // 固定サイズ（小さめ）
           quadrant: 4 as Quadrant, // 停止検討
           cvVsAvg: 0,
@@ -475,18 +475,21 @@ export default function MatrixChart({ data }: MatrixChartProps) {
           平均
         </div>
 
-        {/* CV=0エリアのラベル（下部左側） */}
+        {/* CV=0エリアのラベル（左端） */}
         {chartData.cvZeroCount > 0 && (
           <div
             className="absolute pointer-events-none z-10"
-            style={{ bottom: '50px', left: 'calc(60px + (100% - 100px) * 0.25)', transform: 'translateX(-50%)' }}
+            style={{ top: 'calc(40px + (100% - 100px) * 0.75)', left: '15px' }}
           >
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 shadow-sm">
-              <div className="text-xs font-medium text-red-600 text-center mb-0.5">
-                CV=0 赤字CR ({chartData.cvZeroCount}種)
+            <div className="bg-red-50 border border-red-200 rounded-lg px-2 py-2 shadow-sm">
+              <div className="text-[10px] font-medium text-red-600 text-center whitespace-nowrap">
+                CV=0
               </div>
-              <div className="text-[10px] text-red-400 text-center">
-                ← 粗利低い　　粗利高い →
+              <div className="text-[10px] text-red-600 text-center">
+                ({chartData.cvZeroCount}種)
+              </div>
+              <div className="text-[9px] text-red-400 text-center mt-1 leading-tight">
+                ↑粗利高<br/>↓粗利低
               </div>
             </div>
           </div>
