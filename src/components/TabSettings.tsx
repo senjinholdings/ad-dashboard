@@ -20,6 +20,9 @@ import {
 const RAW_SHEET_NAME = 'raw';
 const CREATIVE_SHEET_NAME = 'クリエイティブ';
 
+// デフォルトのスプレッドシートURL
+const DEFAULT_SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1QJRcFG1wiw7n8V09WSKVNMCU75F380VY88hJ84uuPw4/edit?gid=567193483#gid=567193483';
+
 // localStorage操作（前提条件）
 const PREMISE_STORAGE_KEY = 'ad-dashboard-premise-data';
 
@@ -30,7 +33,7 @@ function clearPremiseData() {
 }
 
 export default function TabSettings() {
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState('');
+  const [spreadsheetUrl, setSpreadsheetUrl] = useState(DEFAULT_SPREADSHEET_URL);
   const [spreadsheetConfig, setSpreadsheetConfig] = useState<SpreadsheetConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +48,9 @@ export default function TabSettings() {
     if (savedConfig) {
       setSpreadsheetConfig(savedConfig);
       setSpreadsheetUrl(savedConfig.url);
+    } else {
+      // 未接続時はデフォルトURLをセット
+      setSpreadsheetUrl(DEFAULT_SPREADSHEET_URL);
     }
   }, []);
 
@@ -148,7 +154,7 @@ export default function TabSettings() {
   };
 
   const handleDisconnect = () => {
-    setSpreadsheetUrl('');
+    setSpreadsheetUrl(DEFAULT_SPREADSHEET_URL);
     setSpreadsheetConfig(null);
     setCreativeNames([]);
     setCreativesCount(0);
