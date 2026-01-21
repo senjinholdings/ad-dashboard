@@ -393,11 +393,12 @@ export default function Tab2Report() {
                     setSelectedPersons([value]);
                   }
                 }}
-                className="appearance-none bg-white border border-[#cfe7e7] rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-[#0b7f7b] focus:outline-none focus:ring-2 focus:ring-[#0b7f7b]/20 focus:border-[#0b7f7b] transition-colors cursor-pointer"
+                title={selectedPersons.length === 0 ? '全担当者' : selectedPersons[0]}
+                className="appearance-none bg-white border border-[#cfe7e7] rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-[#0b7f7b] focus:outline-none focus:ring-2 focus:ring-[#0b7f7b]/20 focus:border-[#0b7f7b] transition-colors cursor-pointer w-[120px] truncate"
               >
                 <option value="all">全担当者</option>
                 {personNames.map(name => (
-                  <option key={name} value={name}>{name}</option>
+                  <option key={name} value={name} title={name}>{name}</option>
                 ))}
               </select>
               <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-lg">
@@ -418,11 +419,12 @@ export default function Tab2Report() {
                     setSelectedAccounts([value]);
                   }
                 }}
-                className="appearance-none bg-white border border-[#cfe7e7] rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-[#0b7f7b] focus:outline-none focus:ring-2 focus:ring-[#0b7f7b]/20 focus:border-[#0b7f7b] transition-colors cursor-pointer"
+                title={selectedAccounts.length === 0 ? '全アカウント' : selectedAccounts[0]}
+                className="appearance-none bg-white border border-[#cfe7e7] rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-[#0b7f7b] focus:outline-none focus:ring-2 focus:ring-[#0b7f7b]/20 focus:border-[#0b7f7b] transition-colors cursor-pointer w-[180px] truncate"
               >
                 <option value="all">全アカウント</option>
                 {accountNames.map(name => (
-                  <option key={name} value={name}>{name}</option>
+                  <option key={name} value={name} title={name}>{name}</option>
                 ))}
               </select>
               <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-lg">
