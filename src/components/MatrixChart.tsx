@@ -211,13 +211,11 @@ export default function MatrixChart({ data }: MatrixChartProps) {
   const handleTooltipMouseEnter = useCallback(() => {
     clearHideTimeout();
     isTooltipPinnedRef.current = true;
-    setIsTooltipPinned(true);
   }, [clearHideTimeout]);
 
   // ツールチップからマウスが離れた → 固定解除
   const handleTooltipMouseLeave = useCallback(() => {
     isTooltipPinnedRef.current = false;
-    setIsTooltipPinned(false);
     scheduleHide();
   }, [scheduleHide]);
 
