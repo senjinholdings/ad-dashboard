@@ -149,6 +149,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const showTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
 
   // ツールチップを非表示にするタイムアウトをクリア
@@ -156,6 +157,14 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = null;
+    }
+  }, []);
+
+  // ツールチップを表示するタイムアウトをクリア
+  const clearShowTimeout = useCallback(() => {
+    if (showTimeoutRef.current) {
+      clearTimeout(showTimeoutRef.current);
+      showTimeoutRef.current = null;
     }
   }, []);
 
@@ -175,12 +184,17 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
+      if (showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+      }
     };
   }, []);
 
-  // ホバー時のツールチップ表示（固定中は更新しない）
+  // ホバー時のツールチップ表示（固定中は更新しない）- debounceで遅延表示
   const handlePointHover = useCallback((pointData: BubbleDataItem | null, event?: React.MouseEvent) => {
     if (isTooltipPinnedRef.current) return; // 固定中は更新しない
+
+    clearShowTimeout();
 
     if (!pointData || !event) {
       scheduleHide();
@@ -194,8 +208,11 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    setTooltipState({ data: pointData, x, y });
-  }, [clearHideTimeout, scheduleHide]);
+    // 50ms後に表示（連続的なマウス移動での再レンダリングを防ぐ）
+    showTimeoutRef.current = setTimeout(() => {
+      setTooltipState({ data: pointData, x, y });
+    }, 50);
+  }, [clearHideTimeout, clearShowTimeout, scheduleHide]);
 
   // ツールチップにマウスが入った → 固定
   const handleTooltipMouseEnter = useCallback(() => {

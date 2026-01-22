@@ -59,6 +59,7 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const showTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
 
   // ツールチップを非表示にするタイムアウトをクリア
@@ -66,6 +67,14 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = null;
+    }
+  }, []);
+
+  // ツールチップを表示するタイムアウトをクリア
+  const clearShowTimeout = useCallback(() => {
+    if (showTimeoutRef.current) {
+      clearTimeout(showTimeoutRef.current);
+      showTimeoutRef.current = null;
     }
   }, []);
 
@@ -79,24 +88,29 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     }, 400);
   }, [clearHideTimeout]);
 
-  // チャートのマウスムーブ - chartDataはuseMemoで後に定義されるため、関数内で参照
+  // チャートのマウスムーブ - debounceで遅延表示
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleChartMouseMove = useCallback((state: any, data: DailyData[]) => {
     if (isTooltipPinnedRef.current) return; // ピン留め中は更新しない
 
+    clearShowTimeout();
+    clearHideTimeout();
+
     // activeTooltipIndexを使ってデータを取得
     const index = state?.activeTooltipIndex;
     if (index !== undefined && index >= 0 && index < data.length && state?.activeCoordinate) {
-      clearHideTimeout();
       const dayData = data[index];
-      setTooltipState({
-        dayData,
-        label: dayData.displayDate,
-        x: state.activeCoordinate.x,
-        y: state.activeCoordinate.y,
-      });
+      // 50ms後に表示（連続的なマウス移動での再レンダリングを防ぐ）
+      showTimeoutRef.current = setTimeout(() => {
+        setTooltipState({
+          dayData,
+          label: dayData.displayDate,
+          x: state.activeCoordinate.x,
+          y: state.activeCoordinate.y,
+        });
+      }, 50);
     }
-  }, [clearHideTimeout]);
+  }, [clearHideTimeout, clearShowTimeout]);
 
   // チャートからマウスが離れた
   const handleChartMouseLeave = useCallback(() => {
@@ -124,6 +138,9 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     return () => {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
+      }
+      if (showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
       }
     };
   }, []);
