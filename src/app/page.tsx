@@ -26,17 +26,53 @@ export default function Home() {
       >
         {/* ロゴ・タイトル */}
         <div className="px-4 py-6 border-b border-white/20">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-2xl">monitoring</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {isLeftSidebarCollapsed ? (
+                /* 閉じている状態：ホバーで開くボタン表示 */
+                <button
+                  onClick={() => setLeftSidebarCollapsed(false)}
+                  className="group relative"
+                >
+                  <span className="material-symbols-outlined text-2xl group-hover:opacity-0 transition-opacity">
+                    monitoring
+                  </span>
+                  <span className="material-symbols-outlined text-2xl absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    left_panel_open
+                  </span>
+                  {/* カスタムツールチップ */}
+                  <span className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    サイドバーを開く
+                  </span>
+                </button>
+              ) : (
+                <span className="material-symbols-outlined text-2xl">monitoring</span>
+              )}
+              {!isLeftSidebarCollapsed && (
+                <div className="overflow-hidden">
+                  <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
+                    広告運用DB
+                  </h1>
+                  <p className="text-xs text-teal-100 mt-0.5 whitespace-nowrap">
+                    週次報告・分析ツール
+                  </p>
+                </div>
+              )}
+            </div>
+            {/* 折りたたみトグル（開いている時のみ表示） */}
             {!isLeftSidebarCollapsed && (
-              <div className="overflow-hidden">
-                <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
-                  広告運用DB
-                </h1>
-                <p className="text-xs text-teal-100 mt-0.5 whitespace-nowrap">
-                  週次報告・分析ツール
-                </p>
-              </div>
+              <button
+                onClick={() => setLeftSidebarCollapsed(true)}
+                className="group relative p-1 hover:bg-white/10 rounded transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">
+                  left_panel_close
+                </span>
+                {/* カスタムツールチップ */}
+                <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  サイドバーを閉じる
+                </span>
+              </button>
             )}
           </div>
         </div>
@@ -77,22 +113,6 @@ export default function Home() {
             <span className="material-symbols-outlined text-sm">link</span>
             {!isLeftSidebarCollapsed && (
               <span className="whitespace-nowrap">スプレッドシート連携</span>
-            )}
-          </button>
-
-          {/* 折りたたみトグル */}
-          <button
-            onClick={() => setLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
-            className={`mt-3 flex items-center gap-2 text-xs text-teal-100 hover:text-white transition-colors ${
-              isLeftSidebarCollapsed ? 'justify-center w-full' : ''
-            }`}
-            title={isLeftSidebarCollapsed ? '展開' : '折りたたむ'}
-          >
-            <span className="material-symbols-outlined text-sm">
-              {isLeftSidebarCollapsed ? 'chevron_right' : 'chevron_left'}
-            </span>
-            {!isLeftSidebarCollapsed && (
-              <span className="whitespace-nowrap">折りたたむ</span>
             )}
           </button>
         </div>

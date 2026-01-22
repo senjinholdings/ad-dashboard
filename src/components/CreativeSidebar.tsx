@@ -135,25 +135,12 @@ export default function CreativeSidebar({
           <span className="material-symbols-outlined text-[#0b7f7b]">movie</span>
           <span className="font-semibold text-gray-800 truncate">{creativeName}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {creativeLink && (
-            <a
-              href={creativeLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-              title="新しいタブで開く"
-            >
-              <span className="material-symbols-outlined text-gray-600 text-xl">open_in_new</span>
-            </a>
-          )}
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <span className="material-symbols-outlined text-gray-600 text-xl">close</span>
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+        >
+          <span className="material-symbols-outlined text-gray-600 text-xl">close</span>
+        </button>
       </div>
 
       {/* コンテンツ（スクロール可能） */}
