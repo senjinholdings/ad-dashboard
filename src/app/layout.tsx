@@ -4,6 +4,7 @@ import "./globals.css";
 import { ReportDateRangeProvider } from "@/contexts/ReportDateRangeContext";
 import { AccountProvider } from "@/contexts/AccountContext";
 import { PersonProvider } from "@/contexts/PersonContext";
+import { CreativeSidebarProvider } from "@/contexts/CreativeSidebarContext";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -33,7 +34,9 @@ export default function RootLayout({
         <AccountProvider>
           <PersonProvider>
             <ReportDateRangeProvider>
-              {children}
+              <CreativeSidebarProvider>
+                {children}
+              </CreativeSidebarProvider>
             </ReportDateRangeProvider>
           </PersonProvider>
         </AccountProvider>

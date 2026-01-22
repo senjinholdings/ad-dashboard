@@ -14,10 +14,10 @@ import {
 } from 'recharts';
 import { CreativeData } from '@/types';
 import { formatCurrencyFull } from '@/utils/csvParser';
-import CreativePreviewModal from './CreativePreviewModal';
 
 interface DailyProfitChartProps {
   data: CreativeData[];
+  onCreativeClick?: (creativeName: string, creativeLink: string) => void;
 }
 
 // カラーパレット（クリエイティブ用）
@@ -52,24 +52,14 @@ interface TooltipState {
   y: number;
 }
 
-interface PreviewState {
-  url: string;
-  title: string;
-}
-
-export default function DailyProfitChart({ data }: DailyProfitChartProps) {
+export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitChartProps) {
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
   const [isTooltipPinned, setIsTooltipPinned] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
-  const [preview, setPreview] = useState<PreviewState | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
-
-  const handlePreviewClick = useCallback((url: string, title: string) => {
-    setPreview({ url, title });
-  }, []);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -475,9 +465,9 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
                       className="w-3 h-3 rounded-sm shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    {item.link ? (
+                    {onCreativeClick ? (
                       <button
-                        onClick={() => handlePreviewClick(item.link, item.name)}
+                        onClick={() => onCreativeClick(item.name, item.link)}
                         className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate text-left cursor-pointer"
                       >
                         {item.name}
@@ -502,14 +492,6 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
           </div>
         )}
       </div>
-
-      {/* プレビューモーダル */}
-      <CreativePreviewModal
-        isOpen={preview !== null}
-        onClose={() => setPreview(null)}
-        url={preview?.url || ''}
-        title={preview?.title}
-      />
     </div>
   );
 }

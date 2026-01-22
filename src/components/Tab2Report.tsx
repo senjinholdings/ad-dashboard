@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { CreativeData, AggregatedCreativeData } from '@/types';
 import { calculateSummary, assignCreativeStatus } from '@/utils/csvParser';
 import { loadCreativesFromIndexedDB, saveCreativesToIndexedDB } from '@/utils/indexedDB';
 import {
   loadSpreadsheetConfig,
-  extractSpreadsheetId,
   extractSheetGid,
   fetchSpreadsheetData,
   fetchSpreadsheetDataByName,
@@ -26,6 +25,7 @@ import MultiSelectDropdown from './MultiSelectDropdown';
 import { useReportDateRange } from '@/contexts/ReportDateRangeContext';
 import { useAccount } from '@/contexts/AccountContext';
 import { usePerson } from '@/contexts/PersonContext';
+import { useCreativeSidebar } from '@/contexts/CreativeSidebarContext';
 import { isWithinInterval, parseISO, startOfDay } from 'date-fns';
 
 // テーブルヘッダー定義
@@ -57,6 +57,9 @@ export default function Tab2Report() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // サイドバー（Context）
+  const { openSidebar, setSidebarData } = useCreativeSidebar();
+
   // データを読み込む（マウント時 & storageイベント時）
   useEffect(() => {
     const loadData = async () => {
@@ -77,7 +80,7 @@ export default function Tab2Report() {
   }, []);
 
   // スプレッドシートからデータを更新
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = async () => {
     const config = loadSpreadsheetConfig();
     if (!config?.spreadsheetId) return;
 
@@ -153,7 +156,7 @@ export default function Tab2Report() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  };
 
   // フィルター・ソート状態
   const [filters, setFilters] = useState<Record<string, MetricFilterConfig | null>>({});
@@ -217,7 +220,7 @@ export default function Tab2Report() {
   };
 
   // 日付範囲 + アカウント + 担当者でフィルタリング
-  const filteredCreatives = creatives.filter(c => {
+  const filteredCreatives = useMemo(() => creatives.filter(c => {
     // アカウントフィルター（選択されていない場合は全件表示）
     if (selectedAccounts.length > 0 && !selectedAccounts.includes(c.accountName)) {
       return false;
@@ -230,8 +233,12 @@ export default function Tab2Report() {
     const creativeDate = parseCreativeDate(c.date);
     if (!creativeDate) return true;
     return isWithinInterval(creativeDate, { start: startOfDay(range.from), end: startOfDay(range.to) });
-  });
+  }), [creatives, selectedAccounts, selectedPersons, range.from, range.to]);
 
+  // サイドバー用にフィルタされたデータをContextに設定
+  useEffect(() => {
+    setSidebarData(filteredCreatives);
+  }, [filteredCreatives, setSidebarData]);
 
   const summary = calculateSummary(filteredCreatives);
 
@@ -440,13 +447,13 @@ export default function Tab2Report() {
       <SummaryCards data={summary} />
 
       {/* デイリー利益推移 */}
-      <DailyProfitChart data={filteredCreatives} />
+      <DailyProfitChart data={filteredCreatives} onCreativeClick={openSidebar} />
 
       {/* パフォーマンスマトリクス */}
-      <MatrixChart data={classifiedCR} />
+      <MatrixChart data={classifiedCR} onCreativeClick={openSidebar} />
 
       {/* 好調/不調CR */}
-      <CreativeTable topCreatives={topCR} poorCreatives={poorCR} />
+      <CreativeTable topCreatives={topCR} poorCreatives={poorCR} onCreativeClick={openSidebar} />
 
       {/* クリエイティブ別集計テーブル */}
       <div className="bg-white rounded-xl border border-[#cfe7e7] p-6">
