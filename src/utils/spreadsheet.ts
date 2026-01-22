@@ -207,13 +207,18 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
       const mapped: Partial<SpreadsheetAdData> = {};
 
       for (const [csvCol, dataKey] of Object.entries(COLUMN_MAP)) {
-        // ヘッダーの部分一致でカラムを検索
-        const headerIndex = headers.findIndex((h) => {
+        // 完全一致を優先し、なければ部分一致で検索
+        let headerIndex = headers.findIndex((h) => {
           if (!h) return false;
-          const trimmedHeader = h.trim();
-          // 完全一致または部分一致
-          return trimmedHeader === csvCol || trimmedHeader.includes(csvCol) || csvCol.includes(trimmedHeader);
+          return h.trim() === csvCol;
         });
+        if (headerIndex === -1) {
+          headerIndex = headers.findIndex((h) => {
+            if (!h) return false;
+            const trimmedHeader = h.trim();
+            return trimmedHeader.includes(csvCol) || csvCol.includes(trimmedHeader);
+          });
+        }
 
         if (headerIndex !== -1 && row[headerIndex] !== undefined) {
           const value = row[headerIndex];
