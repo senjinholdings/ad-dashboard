@@ -149,22 +149,14 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const showTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
+  const lastThrottleTimeRef = useRef(0);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = null;
-    }
-  }, []);
-
-  // ツールチップを表示するタイムアウトをクリア
-  const clearShowTimeout = useCallback(() => {
-    if (showTimeoutRef.current) {
-      clearTimeout(showTimeoutRef.current);
-      showTimeoutRef.current = null;
     }
   }, []);
 
@@ -184,35 +176,32 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
-      if (showTimeoutRef.current) {
-        clearTimeout(showTimeoutRef.current);
-      }
     };
   }, []);
 
-  // ホバー時のツールチップ表示（固定中は更新しない）- debounceで遅延表示
+  // ホバー時のツールチップ表示（固定中は更新しない）- throttleで頻度制限
   const handlePointHover = useCallback((pointData: BubbleDataItem | null, event?: React.MouseEvent) => {
-    if (isTooltipPinnedRef.current) return; // 固定中は更新しない
-
-    clearShowTimeout();
+    if (isTooltipPinnedRef.current) return;
 
     if (!pointData || !event) {
       scheduleHide();
       return;
     }
 
-    clearHideTimeout();
-    const rect = chartContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const now = Date.now();
+    // 100ms以上経過していれば更新
+    if (now - lastThrottleTimeRef.current >= 100) {
+      lastThrottleTimeRef.current = now;
+      clearHideTimeout();
 
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+      const rect = chartContainerRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-    // 50ms後に表示（連続的なマウス移動での再レンダリングを防ぐ）
-    showTimeoutRef.current = setTimeout(() => {
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
       setTooltipState({ data: pointData, x, y });
-    }, 50);
-  }, [clearHideTimeout, clearShowTimeout, scheduleHide]);
+    }
+  }, [clearHideTimeout, scheduleHide]);
 
   // ツールチップにマウスが入った → 固定
   const handleTooltipMouseEnter = useCallback(() => {

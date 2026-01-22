@@ -59,22 +59,15 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const showTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
+  const lastThrottleTimeRef = useRef(0);
+  const pendingStateRef = useRef<TooltipState | null>(null);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
       hideTimeoutRef.current = null;
-    }
-  }, []);
-
-  // ツールチップを表示するタイムアウトをクリア
-  const clearShowTimeout = useCallback(() => {
-    if (showTimeoutRef.current) {
-      clearTimeout(showTimeoutRef.current);
-      showTimeoutRef.current = null;
     }
   }, []);
 
@@ -88,29 +81,34 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     }, 400);
   }, [clearHideTimeout]);
 
-  // チャートのマウスムーブ - debounceで遅延表示
+  // チャートのマウスムーブ - throttleで頻度制限（100ms間隔）
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleChartMouseMove = useCallback((state: any, data: DailyData[]) => {
-    if (isTooltipPinnedRef.current) return; // ピン留め中は更新しない
+  const handleChartMouseMove = useCallback((state: any, chartDataRef: DailyData[]) => {
+    if (isTooltipPinnedRef.current) return;
 
-    clearShowTimeout();
-    clearHideTimeout();
-
-    // activeTooltipIndexを使ってデータを取得
+    const now = Date.now();
     const index = state?.activeTooltipIndex;
-    if (index !== undefined && index >= 0 && index < data.length && state?.activeCoordinate) {
-      const dayData = data[index];
-      // 50ms後に表示（連続的なマウス移動での再レンダリングを防ぐ）
-      showTimeoutRef.current = setTimeout(() => {
-        setTooltipState({
-          dayData,
-          label: dayData.displayDate,
-          x: state.activeCoordinate.x,
-          y: state.activeCoordinate.y,
-        });
-      }, 50);
+
+    if (index !== undefined && index >= 0 && index < chartDataRef.length && state?.activeCoordinate) {
+      const dayData = chartDataRef[index];
+      const newState: TooltipState = {
+        dayData,
+        label: dayData.displayDate,
+        x: state.activeCoordinate.x,
+        y: state.activeCoordinate.y,
+      };
+
+      // 100ms以上経過していれば即座に更新
+      if (now - lastThrottleTimeRef.current >= 100) {
+        lastThrottleTimeRef.current = now;
+        clearHideTimeout();
+        setTooltipState(newState);
+      } else {
+        // そうでなければ保留（次回のthrottle時に使用）
+        pendingStateRef.current = newState;
+      }
     }
-  }, [clearHideTimeout, clearShowTimeout]);
+  }, [clearHideTimeout]);
 
   // チャートからマウスが離れた
   const handleChartMouseLeave = useCallback(() => {
@@ -138,9 +136,6 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     return () => {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
-      }
-      if (showTimeoutRef.current) {
-        clearTimeout(showTimeoutRef.current);
       }
     };
   }, []);
