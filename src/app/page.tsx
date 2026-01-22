@@ -127,8 +127,8 @@ export default function Home() {
         </div>
       </main>
 
-      {/* 右サイドバー（クリエイティブ詳細） */}
-      {sidebar && (
+      {/* 右サイドバー（クリエイティブ詳細） - ダッシュボードレポートタブのみ表示 */}
+      {sidebar && activeTab === 'report' && (
         <aside className="w-[420px] shrink-0 border-l border-[#cfe7e7] bg-white h-screen overflow-hidden">
           <CreativeSidebar
             isOpen={true}
