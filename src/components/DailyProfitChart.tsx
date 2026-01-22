@@ -164,7 +164,7 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    if (now - lastThrottleTimeRef.current < 50) return;
+    if (now - lastThrottleTimeRef.current < 200) return;
     lastThrottleTimeRef.current = now;
 
     const container = chartContainerRef.current;

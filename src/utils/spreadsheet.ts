@@ -177,18 +177,23 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
   // ヘッダー行の次の行からがデータ
   const dataRows = rows.slice(headerRowIndex + 1);
 
-  // デバッグ: ヘッダーと最初のデータ行を出力
-  const dateHeaderIndex = headers.findIndex(h => h && (h.includes('日付') || h.includes('レポート開始日')));
-  console.log('DEBUG parseSpreadsheetCsv:', {
-    headerRowIndex,
-    allHeaders: headers,
-    dateHeaderIndex,
-    dateHeaderName: dateHeaderIndex >= 0 ? headers[dateHeaderIndex] : 'NOT FOUND',
-    firstRowDateValue: dateHeaderIndex >= 0 ? dataRows[0]?.[dateHeaderIndex] : 'N/A',
-    personNameHeaderIndex: headers.findIndex(h => h && h.includes('担当')),
-    firstDataRow: dataRows[0],
-    totalDataRows: dataRows.length
-  });
+  // デバッグ: カラムマッチング結果を出力
+  const columnMatches: Record<string, { headerIndex: number; headerName: string }> = {};
+  for (const [csvCol, dataKey] of Object.entries(COLUMN_MAP)) {
+    const headerIndex = headers.findIndex((h) => {
+      if (!h) return false;
+      const trimmedHeader = h.trim();
+      return trimmedHeader === csvCol || trimmedHeader.includes(csvCol) || csvCol.includes(trimmedHeader);
+    });
+    if (headerIndex !== -1) {
+      columnMatches[`${csvCol} → ${dataKey}`] = { headerIndex, headerName: headers[headerIndex] };
+    }
+  }
+  console.log('DEBUG カラムマッチング:', columnMatches);
+  console.log('DEBUG 全ヘッダー:', headers);
+  // CVカラムの確認
+  const cvHeaderIndex = headers.findIndex(h => h && (h.trim() === 'CV' || h.trim() === '結果' || h.trim().includes('CV') || h.trim().includes('結果')));
+  console.log('DEBUG CV列:', { cvHeaderIndex, headerName: cvHeaderIndex >= 0 ? headers[cvHeaderIndex] : 'NOT FOUND', firstRowValue: cvHeaderIndex >= 0 ? dataRows[0]?.[cvHeaderIndex] : 'N/A' });
 
   return dataRows
     .filter((row) => {

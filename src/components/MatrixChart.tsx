@@ -46,7 +46,7 @@ function TooltipContent({ data, onCreativeClick }: { data: BubbleDataItem; onCre
   const config = QUADRANT_CONFIG[data.quadrant];
 
   return (
-    <div className="border border-[#cfe7e7] rounded-xl shadow-xl p-4 max-w-sm overscroll-contain" style={{ backgroundColor: '#ffffff', boxShadow: '0 0 0 1px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}>
+    <div className="border border-[#cfe7e7] rounded-xl shadow-xl p-4 w-72 overscroll-contain" style={{ backgroundColor: '#ffffff', boxShadow: '0 0 0 1px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}>
       <div className="flex items-center justify-between mb-2">
         {onCreativeClick ? (
           <button
@@ -282,7 +282,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    if (now - lastThrottleTimeRef.current < 100) return;
+    if (now - lastThrottleTimeRef.current < 150) return;
     lastThrottleTimeRef.current = now;
 
     const container = chartContainerRef.current;
@@ -577,7 +577,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
         {/* カスタムツールチップ（初期非表示、DOMで位置更新） */}
         <div
           ref={tooltipRef}
-          className="tooltip-container absolute z-50"
+          className="tooltip-container absolute z-[100]"
           data-testid="matrix-tooltip"
           style={{ display: 'none' }}
           onMouseEnter={handleTooltipMouseEnter}
