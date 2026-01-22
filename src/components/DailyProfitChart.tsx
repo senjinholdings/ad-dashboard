@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect, memo } from 'react';
 import {
   BarChart,
   Bar,
@@ -10,7 +10,6 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   Cell,
-  Tooltip,
 } from 'recharts';
 import { CreativeData } from '@/types';
 import { formatCurrencyFull } from '@/utils/csvParser';
@@ -45,26 +44,98 @@ interface DailyData {
   [key: string]: string | number | SlotData | undefined;
 }
 
-interface TooltipState {
-  dayData: DailyData;
-  label: string;
-  x: number;
-  y: number;
-}
-
 // チャートのマージン設定
 const CHART_MARGIN = { top: 20, right: 30, left: 20, bottom: 60 };
 
+// メモ化されたチャートコンポーネント（ツールチップ更新で再レンダリングしない）
+interface MemoizedChartProps {
+  chartData: DailyData[];
+  posSlots: number[];
+  negSlots: number[];
+}
+
+const MemoizedChart = memo(function MemoizedChart({ chartData, posSlots, negSlots }: MemoizedChartProps) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart
+        data={chartData}
+        margin={CHART_MARGIN}
+        stackOffset="sign"
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        <XAxis
+          dataKey="displayDate"
+          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tickLine={{ stroke: '#d1d5db' }}
+          angle={-45}
+          textAnchor="end"
+          height={60}
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`}
+          tickLine={{ stroke: '#d1d5db' }}
+        />
+        <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
+
+        {posSlots.map((slotIndex) => (
+          <Bar
+            key={`pos_${slotIndex}`}
+            dataKey={`pos_${slotIndex}`}
+            stackId="profit"
+            isAnimationActive={false}
+            fill="#cccccc"
+          >
+            {chartData.map((entry, dataIndex) => {
+              const color = entry[`pos_${slotIndex}_color`] as string | undefined;
+              return (
+                <Cell
+                  key={dataIndex}
+                  fill={color || 'transparent'}
+                />
+              );
+            })}
+          </Bar>
+        ))}
+
+        {negSlots.map((slotIndex) => (
+          <Bar
+            key={`neg_${slotIndex}`}
+            dataKey={`neg_${slotIndex}`}
+            stackId="profit"
+            isAnimationActive={false}
+            fill="#cccccc"
+          >
+            {chartData.map((entry, dataIndex) => {
+              const color = entry[`neg_${slotIndex}_color`] as string | undefined;
+              return (
+                <Cell
+                  key={dataIndex}
+                  fill={color || 'transparent'}
+                />
+              );
+            })}
+          </Bar>
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+});
+
 export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitChartProps) {
-  const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
+  // ツールチップの内容（ホバー対象が変わった時のみ更新）
+  const [tooltipData, setTooltipData] = useState<{ dayData: DailyData; label: string } | null>(null);
   const [isTooltipPinned, setIsTooltipPinned] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
+
+  // refs
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
   const lastThrottleTimeRef = useRef(0);
   const chartDataRef = useRef<DailyData[]>([]);
+  const lastHoveredIndexRef = useRef<number | null>(null);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -79,9 +150,13 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     clearHideTimeout();
     hideTimeoutRef.current = setTimeout(() => {
       if (!isTooltipPinnedRef.current) {
-        setTooltipState(null);
+        setTooltipData(null);
+        lastHoveredIndexRef.current = null;
+        if (tooltipRef.current) {
+          tooltipRef.current.style.display = 'none';
+        }
       }
-    }, 400);
+    }, 300);
   }, [clearHideTimeout]);
 
   // 独自のマウスムーブハンドラ - X座標から直接インデックスを計算
@@ -89,23 +164,26 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    if (now - lastThrottleTimeRef.current < 50) return; // 50ms throttle
+    if (now - lastThrottleTimeRef.current < 16) return;
+    lastThrottleTimeRef.current = now;
 
     const container = chartContainerRef.current;
+    const tooltip = tooltipRef.current;
     const chartData = chartDataRef.current;
-    if (!container || chartData.length === 0) return;
+    if (!container || !tooltip || chartData.length === 0) return;
 
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
     // チャート描画エリアの計算
-    const chartLeft = CHART_MARGIN.left;
+    const yAxisWidth = 60;
+    const chartLeft = CHART_MARGIN.left + yAxisWidth;
     const chartRight = containerWidth - CHART_MARGIN.right;
     const chartWidth = chartRight - chartLeft;
 
-    // X座標がチャートエリア外なら無視
-    if (x < chartLeft || x > chartRight) {
+    // X座標がチャートエリア外なら非表示
+    if (x < chartLeft || x > chartRight || chartWidth <= 0) {
       scheduleHide();
       return;
     }
@@ -118,14 +196,18 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     const dayData = chartData[clampedIndex];
     if (!dayData) return;
 
-    lastThrottleTimeRef.current = now;
     clearHideTimeout();
-    setTooltipState({
-      dayData,
-      label: dayData.displayDate,
-      x,
-      y,
-    });
+
+    // ツールチップ位置をDOMで直接更新（React再レンダリングを回避）
+    tooltip.style.display = 'block';
+    tooltip.style.left = `${Math.max(0, Math.min(x, (containerWidth || 600) - 300))}px`;
+    tooltip.style.top = `${Math.max(10, Math.min(y - 100, 200))}px`;
+
+    // ホバー対象が変わった時だけ内容を更新
+    if (lastHoveredIndexRef.current !== clampedIndex) {
+      lastHoveredIndexRef.current = clampedIndex;
+      setTooltipData({ dayData, label: dayData.displayDate });
+    }
   }, [containerWidth, clearHideTimeout, scheduleHide]);
 
   // チャートからマウスが離れた
@@ -188,10 +270,9 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
   }, []);
 
   const { chartData, creativeCount, maxPosSlots, maxNegSlots } = useMemo(() => {
-    // 日付ごと・クリエイティブごとに利益を集計
     const dailyMap = new Map<string, Map<string, number>>();
     const creativeSet = new Set<string>();
-    const creativeLinkMap = new Map<string, string>(); // クリエイティブ名→リンクのマップ
+    const creativeLinkMap = new Map<string, string>();
 
     data.forEach(item => {
       if (!item.date) return;
@@ -201,7 +282,6 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
 
       creativeSet.add(creativeName);
 
-      // リンクを保存（最初に見つかったものを使用）
       if (item.creativeLink && !creativeLinkMap.has(creativeName)) {
         creativeLinkMap.set(creativeName, item.creativeLink);
       }
@@ -215,7 +295,6 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
       dayData.set(creativeName, currentProfit + item.profit);
     });
 
-    // クリエイティブごとの色を全期間の合計利益順で決定（色の一貫性のため）
     const creativeProfitTotals = new Map<string, number>();
     creativeSet.forEach(name => {
       let total = 0;
@@ -233,7 +312,6 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
       colorMap[name] = COLORS[index % COLORS.length];
     });
 
-    // チャートデータを作成
     const processed = Array.from(dailyMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, dayData]) => {
@@ -243,12 +321,10 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
           total: 0,
         };
 
-        // この日のクリエイティブを利益でソート
         const dayCreatives = Array.from(dayData.entries())
           .map(([name, profit]) => ({ name, profit, color: colorMap[name], link: creativeLinkMap.get(name) || '' }))
           .filter(c => c.profit !== 0);
 
-        // プラスとマイナスに分離
         const positives = dayCreatives
           .filter(c => c.profit > 0)
           .sort((a, b) => b.profit - a.profit);
@@ -311,17 +387,17 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     };
   }, [data]);
 
-  // chartDataRefを更新（独自マウスイベント用）
+  // chartDataRefを更新
   useEffect(() => {
     chartDataRef.current = chartData;
   }, [chartData]);
 
   // ツールチップの内容を生成
   const tooltipItems = useMemo(() => {
-    if (!tooltipState) return [];
+    if (!tooltipData) return [];
 
     const items: SlotData[] = [];
-    const { dayData } = tooltipState;
+    const { dayData } = tooltipData;
 
     for (let i = 0; i < MAX_SLOTS; i++) {
       const posData = dayData[`pos_${i}_data`] as SlotData | undefined;
@@ -342,11 +418,15 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     });
 
     return items;
-  }, [tooltipState]);
+  }, [tooltipData]);
 
   const tooltipTotal = useMemo(() => {
     return tooltipItems.reduce((sum, item) => sum + item.value, 0);
   }, [tooltipItems]);
+
+  // メモ化されたスロット配列
+  const posSlots = useMemo(() => Array.from({ length: maxPosSlots }, (_, i) => i), [maxPosSlots]);
+  const negSlots = useMemo(() => Array.from({ length: maxNegSlots }, (_, i) => i), [maxNegSlots]);
 
   if (data.length === 0 || chartData.length === 0) {
     return (
@@ -369,9 +449,6 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
       </div>
     );
   }
-
-  const posSlots = Array.from({ length: maxPosSlots }, (_, i) => i);
-  const negSlots = Array.from({ length: maxNegSlots }, (_, i) => i);
 
   return (
     <div className="bg-white rounded-xl border border-[#cfe7e7] p-6">
@@ -396,136 +473,68 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
         onMouseMove={handleNativeMouseMove}
         onMouseLeave={handleChartMouseLeave}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={chartData}
-            margin={CHART_MARGIN}
-            stackOffset="sign"
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis
-              dataKey="displayDate"
-              tick={{ fontSize: 11, fill: '#6b7280' }}
-              tickLine={{ stroke: '#d1d5db' }}
-              angle={-45}
-              textAnchor="end"
-              height={60}
-            />
-            <YAxis
-              tick={{ fontSize: 11, fill: '#6b7280' }}
-              tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`}
-              tickLine={{ stroke: '#d1d5db' }}
-            />
-            <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
-            <Tooltip
-              content={() => null}
-              cursor={false}
-              isAnimationActive={false}
-            />
+        {/* メモ化されたチャート */}
+        <MemoizedChart chartData={chartData} posSlots={posSlots} negSlots={negSlots} />
 
-            {posSlots.map((slotIndex) => (
-              <Bar
-                key={`pos_${slotIndex}`}
-                dataKey={`pos_${slotIndex}`}
-                stackId="profit"
-                isAnimationActive={false}
-                fill="#cccccc"
+        {/* カスタムツールチップ（初期非表示、DOMで位置更新） */}
+        <div
+          ref={tooltipRef}
+          className="absolute z-50"
+          style={{ display: 'none' }}
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
+        >
+          {tooltipData && (
+            <>
+              <div className="absolute left-0 top-0 w-5 h-full" />
+              <div
+                className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white ml-5"
+                style={{
+                  minWidth: '260px',
+                  maxWidth: '320px',
+                }}
               >
-                {chartData.map((entry, dataIndex) => {
-                  const color = entry[`pos_${slotIndex}_color`] as string | undefined;
-                  return (
-                    <Cell
-                      key={dataIndex}
-                      fill={color || 'transparent'}
-                    />
-                  );
-                })}
-              </Bar>
-            ))}
-
-            {negSlots.map((slotIndex) => (
-              <Bar
-                key={`neg_${slotIndex}`}
-                dataKey={`neg_${slotIndex}`}
-                stackId="profit"
-                isAnimationActive={false}
-                fill="#cccccc"
-              >
-                {chartData.map((entry, dataIndex) => {
-                  const color = entry[`neg_${slotIndex}_color`] as string | undefined;
-                  return (
-                    <Cell
-                      key={dataIndex}
-                      fill={color || 'transparent'}
-                    />
-                  );
-                })}
-              </Bar>
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-
-        {/* カスタムツールチップ */}
-        {tooltipState && (
-          <div
-            ref={tooltipRef}
-            className="absolute z-50"
-            style={{
-              left: Math.min(tooltipState.x, (containerWidth || 600) - 300),
-              top: Math.max(10, Math.min(tooltipState.y - 100, 200)),
-            }}
-            onMouseEnter={handleTooltipMouseEnter}
-            onMouseLeave={handleTooltipMouseLeave}
-          >
-            {/* 左側の透明なホバー領域 */}
-            <div className="absolute left-0 top-0 w-5 h-full" />
-            <div
-              className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white ml-5"
-              style={{
-                minWidth: '260px',
-                maxWidth: '320px',
-              }}
-            >
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-semibold text-gray-900">{tooltipState.label}</p>
-              {isTooltipPinned && (
-                <span className="text-xs text-gray-400">スクロール可</span>
-              )}
-            </div>
-            <div className="space-y-1 max-h-[300px] overflow-y-auto overscroll-contain pr-1">
-              {tooltipItems.map((item, index) => (
-                <div key={index} className="flex items-center justify-between gap-4 text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div
-                      className="w-3 h-3 rounded-sm shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    {onCreativeClick ? (
-                      <button
-                        onClick={() => onCreativeClick(item.name, item.link)}
-                        className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate text-left cursor-pointer"
-                      >
-                        {item.name}
-                      </button>
-                    ) : (
-                      <span className="text-gray-600 truncate">{item.name}</span>
-                    )}
-                  </div>
-                  <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                    {formatCurrencyFull(item.value)}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-gray-900">{tooltipData.label}</p>
+                  {isTooltipPinned && (
+                    <span className="text-xs text-gray-400">スクロール可</span>
+                  )}
+                </div>
+                <div className="space-y-1 max-h-[300px] overflow-y-auto overscroll-contain pr-1">
+                  {tooltipItems.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between gap-4 text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className="w-3 h-3 rounded-sm shrink-0"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        {onCreativeClick ? (
+                          <button
+                            onClick={() => onCreativeClick(item.name, item.link)}
+                            className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate text-left cursor-pointer"
+                          >
+                            {item.name}
+                          </button>
+                        ) : (
+                          <span className="text-gray-600 truncate">{item.name}</span>
+                        )}
+                      </div>
+                      <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
+                        {formatCurrencyFull(item.value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
+                  <span className="font-medium text-gray-700">合計</span>
+                  <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
+                    {formatCurrencyFull(tooltipTotal)}
                   </span>
                 </div>
-              ))}
-            </div>
-            <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
-              <span className="font-medium text-gray-700">合計</span>
-              <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                {formatCurrencyFull(tooltipTotal)}
-              </span>
-            </div>
-            </div>
-          </div>
-        )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   ScatterChart,
   Scatter,
@@ -32,13 +32,13 @@ const QUADRANT_CONFIG = {
 };
 
 interface BubbleDataItem extends AggregatedCreativeData {
-  x: number;           // 相対X座標 (-100〜100)
-  y: number;           // 相対Y座標 (-100〜100)
-  z: number;           // バブルサイズ (0.5〜2.0)
+  x: number;
+  y: number;
+  z: number;
   quadrant: Quadrant;
-  cvVsAvg: number;     // CV平均比 (%)
-  profitVsAvg: number; // 利益平均比 (%)
-  roasVsAvg: number;   // ROAS平均比 (%)
+  cvVsAvg: number;
+  profitVsAvg: number;
+  roasVsAvg: number;
 }
 
 // ツールチップ内容コンポーネント
@@ -104,29 +104,20 @@ function TooltipContent({ data, onCreativeClick }: { data: BubbleDataItem; onCre
 // 象限を判定（黒字/赤字で上下、CV平均で左右）
 function getQuadrant(cv: number, profit: number, avgCV: number): Quadrant {
   const hasHighCV = cv >= avgCV;
-  const isProfit = profit >= 0; // 黒字かどうか
+  const isProfit = profit >= 0;
 
-  if (hasHighCV && isProfit) return 1;  // 好調: 右上（CV多・黒字）
-  if (hasHighCV && !isProfit) return 2; // 利益改善: 右下（CV多・赤字）
-  if (!hasHighCV && isProfit) return 3; // 拡大余地: 左上（CV少・黒字）
-  return 4;                              // 停止検討: 左下（CV少・赤字）
+  if (hasHighCV && isProfit) return 1;
+  if (hasHighCV && !isProfit) return 2;
+  if (!hasHighCV && isProfit) return 3;
+  return 4;
 }
 
 // 相対座標を計算（-100〜100）
 function calculateRelativePosition(value: number, avg: number, isInverted: boolean = false): number {
   if (avg === 0) return 0;
-
-  // 値が平均の何倍かを計算
   const ratio = value / avg;
-
-  // 比率を-100〜100の範囲にマッピング
-  // ratio = 1 → 0, ratio = 2 → 50, ratio = 0.5 → -50
   let position = (ratio - 1) * 50;
-
-  // -100〜100の範囲にクランプ
   position = Math.max(-100, Math.min(100, position));
-
-  // CPAは反転（低いほど上=良い）
   return isInverted ? -position : position;
 }
 
@@ -134,29 +125,100 @@ function calculateRelativePosition(value: number, avg: number, isInverted: boole
 function calculateBubbleSize(roas: number, avgROAS: number): number {
   if (avgROAS === 0) return 1;
   const ratio = roas / avgROAS;
-  // 0.5〜2.0の範囲にマッピング
   return Math.max(0.5, Math.min(2.0, ratio));
-}
-
-// ツールチップ状態の型
-interface TooltipState {
-  data: BubbleDataItem;
-  x: number;
-  y: number;
 }
 
 // チャートのマージン設定
 const CHART_MARGIN = { top: 40, right: 40, bottom: 60, left: 60 };
-const HIT_RADIUS = 20; // ヒット判定の半径（ピクセル）
+
+// メモ化されたチャートコンポーネント
+interface MemoizedScatterChartProps {
+  points: BubbleDataItem[];
+}
+
+const MemoizedScatterChart = memo(function MemoizedScatterChart({ points }: MemoizedScatterChartProps) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ScatterChart margin={CHART_MARGIN}>
+        <ReferenceArea x1={-100} x2={0} y1={0} y2={100} fill={QUADRANT_CONFIG[3].bgColor} fillOpacity={0.6} />
+        <ReferenceArea x1={0} x2={100} y1={0} y2={100} fill={QUADRANT_CONFIG[1].bgColor} fillOpacity={0.6} />
+        <ReferenceArea x1={-100} x2={0} y1={-100} y2={0} fill={QUADRANT_CONFIG[4].bgColor} fillOpacity={0.6} />
+        <ReferenceArea x1={0} x2={100} y1={-100} y2={0} fill={QUADRANT_CONFIG[2].bgColor} fillOpacity={0.6} />
+
+        <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+
+        <XAxis
+          type="number"
+          dataKey="x"
+          domain={[-100, 100]}
+          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
+          label={{
+            value: '← CV少ない　　　　　CV多い →',
+            position: 'bottom',
+            offset: 10,
+            style: { fontSize: 12, fill: '#6b7280' }
+          }}
+        />
+
+        <YAxis
+          type="number"
+          dataKey="y"
+          domain={[-100, 100]}
+          tick={{ fontSize: 11, fill: '#6b7280' }}
+          tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
+          label={{
+            value: '← 赤字　　　　黒字 →',
+            angle: -90,
+            position: 'left',
+            offset: 0,
+            style: { fontSize: 12, fill: '#6b7280', textAnchor: 'middle' }
+          }}
+        />
+
+        <ZAxis
+          type="number"
+          dataKey="z"
+          range={[60, 600]}
+          domain={[0.5, 2.0]}
+        />
+
+        <ReferenceLine x={0} stroke="#374151" strokeWidth={2} strokeDasharray="6 3" />
+        <ReferenceLine y={0} stroke="#374151" strokeWidth={2} strokeDasharray="6 3" />
+
+        <Scatter
+          data={points}
+          shape="circle"
+          isAnimationActive={false}
+        >
+          {points.map((entry, index) => (
+            <Cell
+              key={`cell-${index}`}
+              fill={QUADRANT_CONFIG[entry.quadrant].color}
+              fillOpacity={0.85}
+              stroke="#fff"
+              strokeWidth={2}
+            />
+          ))}
+        </Scatter>
+      </ScatterChart>
+    </ResponsiveContainer>
+  );
+});
 
 export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps) {
-  const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
+  // ツールチップの内容（ホバー対象が変わった時のみ更新）
+  const [tooltipData, setTooltipData] = useState<BubbleDataItem | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  // refs
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
   const lastThrottleTimeRef = useRef(0);
   const chartPointsRef = useRef<BubbleDataItem[]>([]);
+  const lastHoveredPointRef = useRef<string | null>(null);
 
   // コンテナサイズを監視
   useEffect(() => {
@@ -188,7 +250,11 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     clearHideTimeout();
     hideTimeoutRef.current = setTimeout(() => {
       if (!isTooltipPinnedRef.current) {
-        setTooltipState(null);
+        setTooltipData(null);
+        lastHoveredPointRef.current = null;
+        if (tooltipRef.current) {
+          tooltipRef.current.style.display = 'none';
+        }
       }
     }, 300);
   }, [clearHideTimeout]);
@@ -202,22 +268,34 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     };
   }, []);
 
-  // 独自のマウスムーブハンドラ - 最も近いポイントを探す
+  // バブルサイズからヒット半径を計算
+  const getHitRadius = useCallback((zValue: number): number => {
+    const minArea = 60, maxArea = 600;
+    const area = minArea + ((zValue - 0.5) / 1.5) * (maxArea - minArea);
+    const radius = Math.sqrt(area / Math.PI);
+    return radius + 5;
+  }, []);
+
+  // 独自のマウスムーブハンドラ
   const handleNativeMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    if (now - lastThrottleTimeRef.current < 50) return; // 50ms throttle
+    if (now - lastThrottleTimeRef.current < 16) return;
+    lastThrottleTimeRef.current = now;
 
     const container = chartContainerRef.current;
+    const tooltip = tooltipRef.current;
     const points = chartPointsRef.current;
-    if (!container || points.length === 0) return;
+    if (!container || !tooltip || points.length === 0) return;
+
+    // 計測開始
+    const startTime = performance.now();
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // チャート描画エリアの計算
     const chartLeft = CHART_MARGIN.left;
     const chartTop = CHART_MARGIN.top;
     const chartWidth = containerSize.width - CHART_MARGIN.left - CHART_MARGIN.right;
@@ -225,16 +303,13 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
 
     if (chartWidth <= 0 || chartHeight <= 0) return;
 
-    // マウス座標を-100〜100の座標系に変換
-    const dataX = ((mouseX - chartLeft) / chartWidth) * 200 - 100;
-    const dataY = 100 - ((mouseY - chartTop) / chartHeight) * 200;
-
     // 最も近いポイントを探す
     let closestPoint: BubbleDataItem | null = null;
     let closestDistSq = Infinity;
+    const EARLY_EXIT_THRESHOLD = 100; // 10px以内なら即決定
 
+    const searchStart = performance.now();
     for (const point of points) {
-      // ポイントのピクセル座標を計算
       const pointPixelX = chartLeft + ((point.x + 100) / 200) * chartWidth;
       const pointPixelY = chartTop + ((100 - point.y) / 200) * chartHeight;
 
@@ -242,20 +317,37 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       const dy = mouseY - pointPixelY;
       const distSq = dx * dx + dy * dy;
 
-      if (distSq < closestDistSq && distSq < HIT_RADIUS * HIT_RADIUS) {
+      const hitRadius = getHitRadius(point.z);
+      if (distSq < closestDistSq && distSq < hitRadius * hitRadius) {
         closestDistSq = distSq;
         closestPoint = point;
+        // 十分近ければ早期終了
+        if (distSq < EARLY_EXIT_THRESHOLD) break;
       }
     }
+    const searchEnd = performance.now();
 
     if (closestPoint) {
-      lastThrottleTimeRef.current = now;
       clearHideTimeout();
-      setTooltipState({ data: closestPoint, x: mouseX, y: mouseY });
+
+      // ツールチップ位置をDOMで直接更新
+      tooltip.style.display = 'block';
+      tooltip.style.left = `${Math.max(0, Math.min(mouseX + 10, (containerSize.width || 600) - 280))}px`;
+      tooltip.style.top = `${Math.max(10, Math.min(mouseY - 100, 280))}px`;
+
+      // ホバー対象が変わった時だけ内容を更新
+      const pointKey = closestPoint.creativeName;
+      if (lastHoveredPointRef.current !== pointKey) {
+        lastHoveredPointRef.current = pointKey;
+        setTooltipData(closestPoint);
+        // 内容更新時のみログ出力
+        const endTime = performance.now();
+        console.log(`[MatrixChart] 検索: ${(searchEnd - searchStart).toFixed(2)}ms, 合計: ${(endTime - startTime).toFixed(2)}ms, ポイント数: ${points.length}`);
+      }
     } else {
       scheduleHide();
     }
-  }, [containerSize, clearHideTimeout, scheduleHide]);
+  }, [containerSize, clearHideTimeout, scheduleHide, getHitRadius]);
 
   // ツールチップにマウスが入った → 固定
   const handleTooltipMouseEnter = useCallback(() => {
@@ -270,9 +362,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
   }, [scheduleHide]);
 
   const chartData = useMemo(() => {
-    // CV > 0 のデータ
     const cvPositiveData = data.filter(c => c.cv > 0 && c.cost > 0);
-    // CV = 0 のデータ（赤字のもののみ）
     const cvZeroData = data.filter(c => c.cv === 0 && c.cost > 0 && c.profit < 0);
 
     if (cvPositiveData.length === 0 && cvZeroData.length === 0) {
@@ -287,7 +377,6 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       };
     }
 
-    // CV>0の平均値を計算
     const avgCV = cvPositiveData.length > 0
       ? cvPositiveData.reduce((sum, c) => sum + c.cv, 0) / cvPositiveData.length
       : 0;
@@ -295,44 +384,37 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       ? cvPositiveData.reduce((sum, c) => sum + c.roas, 0) / cvPositiveData.length
       : 0;
 
-    // 黒字/赤字のデータを分離
     const profitableData = cvPositiveData.filter(c => c.profit >= 0);
     const lossData = cvPositiveData.filter(c => c.profit < 0);
 
-    // 黒字グループの最大・最小利益
     const maxProfit = profitableData.length > 0 ? Math.max(...profitableData.map(c => c.profit)) : 0;
     const minProfitInProfitable = profitableData.length > 0 ? Math.min(...profitableData.map(c => c.profit)) : 0;
 
-    // 赤字グループの最大・最小損失
-    const maxLoss = lossData.length > 0 ? Math.max(...lossData.map(c => c.profit)) : 0; // 0に近い方
-    const minLoss = lossData.length > 0 ? Math.min(...lossData.map(c => c.profit)) : 0; // 大きな赤字
+    const maxLoss = lossData.length > 0 ? Math.max(...lossData.map(c => c.profit)) : 0;
+    const minLoss = lossData.length > 0 ? Math.min(...lossData.map(c => c.profit)) : 0;
 
-    // CV>0のポイントを作成
     const cvPositivePoints: BubbleDataItem[] = cvPositiveData.map(creative => {
       const quadrant = getQuadrant(creative.cv, creative.profit, avgCV);
       const cvVsAvg = avgCV > 0 ? (creative.cv / avgCV) * 100 : 100;
-      const profitVsAvg = 0; // 使用しない
+      const profitVsAvg = 0;
       const roasVsAvg = avgROAS > 0 ? (creative.roas / avgROAS) * 100 : 100;
 
-      // Y座標: 黒字なら0〜100、赤字なら-100〜0で相対評価
       let yPosition: number;
       if (creative.profit >= 0) {
-        // 黒字: 0〜100の範囲で相対評価
         const profitRange = maxProfit - minProfitInProfitable;
         if (profitRange === 0) {
-          yPosition = 50; // 全て同じ利益なら中間
+          yPosition = 50;
         } else {
           const ratio = (creative.profit - minProfitInProfitable) / profitRange;
-          yPosition = 5 + ratio * 90; // 5〜95の範囲
+          yPosition = 5 + ratio * 90;
         }
       } else {
-        // 赤字: -100〜0の範囲で相対評価
         const lossRange = maxLoss - minLoss;
         if (lossRange === 0) {
-          yPosition = -50; // 全て同じ赤字なら中間
+          yPosition = -50;
         } else {
           const ratio = (creative.profit - minLoss) / lossRange;
-          yPosition = -95 + ratio * 90; // -95〜-5の範囲
+          yPosition = -95 + ratio * 90;
         }
       }
 
@@ -348,32 +430,28 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       };
     });
 
-    // CV=0のポイントを作成（粗利で縦方向に相対評価）
     let cvZeroPoints: BubbleDataItem[] = [];
     if (cvZeroData.length > 0) {
-      // 粗利（profit < 0）の最大・最小を取得
       const profits = cvZeroData.map(c => c.profit);
-      const maxProfit = Math.max(...profits); // 最も0に近い（赤字が小さい）
-      const minProfit = Math.min(...profits); // 最も負（赤字が大きい）
-      const profitRange = maxProfit - minProfit;
+      const maxProfitZero = Math.max(...profits);
+      const minProfitZero = Math.min(...profits);
+      const profitRange = maxProfitZero - minProfitZero;
 
       cvZeroPoints = cvZeroData.map(creative => {
-        // 粗利で縦方向の相対位置を計算（-100〜-50の範囲）
-        // 粗利が高い（0に近い）= -50（上寄り）、粗利が低い（大きな赤字）= -100（下端）
         let yPosition: number;
         if (profitRange === 0) {
-          yPosition = -75; // 全て同じ粗利なら中間
+          yPosition = -75;
         } else {
-          const profitRatio = (creative.profit - minProfit) / profitRange;
-          yPosition = -100 + (profitRatio * 50); // -100〜-50の範囲
+          const profitRatio = (creative.profit - minProfitZero) / profitRange;
+          yPosition = -100 + (profitRatio * 50);
         }
 
         return {
           ...creative,
-          x: -95, // CV=0なので左端付近に固定（-100だと端で切れるため）
-          y: yPosition, // 粗利で縦方向にプロット
-          z: 0.8, // 固定サイズ（小さめ）
-          quadrant: 4 as Quadrant, // 停止検討
+          x: -95,
+          y: yPosition,
+          z: 0.8,
+          quadrant: 4 as Quadrant,
           cvVsAvg: 0,
           profitVsAvg: 0,
           roasVsAvg: 0,
@@ -383,7 +461,6 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
 
     const points = [...cvPositivePoints, ...cvZeroPoints];
 
-    // 各象限のカウント
     const counts = {
       1: points.filter(p => p.quadrant === 1).length,
       2: points.filter(p => p.quadrant === 2).length,
@@ -391,22 +468,19 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       4: points.filter(p => p.quadrant === 4).length,
     };
 
-    // 黒字/赤字の件数
     const profitCount = points.filter(p => p.profit >= 0).length;
     const lossCount = points.filter(p => p.profit < 0).length;
 
     return { points, avgCV, avgROAS, counts, cvZeroCount: cvZeroData.length, profitCount, lossCount };
   }, [data]);
 
-  // chartPointsRefを更新（独自マウスイベント用）
+  // chartPointsRefを更新
   useEffect(() => {
     chartPointsRef.current = chartData.points;
   }, [chartData.points]);
 
-  // CV > 0 のデータ数
   const validDataCount = data.filter(c => c.cv > 0 && c.cost > 0).length;
 
-  // 表示可能なデータがない場合（CV>0もCV=0の赤字もない）
   if (data.length === 0 || chartData.points.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-[#cfe7e7] p-6">
@@ -449,7 +523,6 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
           </div>
         </div>
 
-        {/* 凡例 */}
         <div className="flex gap-3">
           {([1, 3, 2, 4] as Quadrant[]).map((q) => (
             <div key={q} className="flex items-center gap-1.5">
@@ -464,7 +537,6 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
         </div>
       </div>
 
-      {/* 平均値表示 */}
       <div className="flex gap-6 mb-4 text-sm bg-gray-50 rounded-lg px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-gray-500">平均CV:</span>
@@ -502,152 +574,60 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
         onMouseMove={handleNativeMouseMove}
         onMouseLeave={scheduleHide}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={CHART_MARGIN}>
-            {/* 4象限の背景色 */}
-            {/* 左上: 拡大余地 (x < 0, y > 0) */}
-            <ReferenceArea x1={-100} x2={0} y1={0} y2={100} fill={QUADRANT_CONFIG[3].bgColor} fillOpacity={0.6} />
-            {/* 右上: 好調 (x >= 0, y > 0) */}
-            <ReferenceArea x1={0} x2={100} y1={0} y2={100} fill={QUADRANT_CONFIG[1].bgColor} fillOpacity={0.6} />
-            {/* 左下: 停止検討 (x < 0, y < 0) */}
-            <ReferenceArea x1={-100} x2={0} y1={-100} y2={0} fill={QUADRANT_CONFIG[4].bgColor} fillOpacity={0.6} />
-            {/* 右下: CPA改善 (x >= 0, y < 0) */}
-            <ReferenceArea x1={0} x2={100} y1={-100} y2={0} fill={QUADRANT_CONFIG[2].bgColor} fillOpacity={0.6} />
+        {/* メモ化されたチャート */}
+        <MemoizedScatterChart points={chartData.points} />
 
-            <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+        {/* カスタムツールチップ（初期非表示、DOMで位置更新） */}
+        <div
+          ref={tooltipRef}
+          className="tooltip-container absolute z-50"
+          style={{ display: 'none' }}
+          onMouseEnter={handleTooltipMouseEnter}
+          onMouseLeave={handleTooltipMouseLeave}
+        >
+          {tooltipData && (
+            <TooltipContent data={tooltipData} onCreativeClick={onCreativeClick} />
+          )}
+        </div>
 
-            {/* X軸: 相対CV */}
-            <XAxis
-              type="number"
-              dataKey="x"
-              domain={[-100, 100]}
-              tick={{ fontSize: 11, fill: '#6b7280' }}
-              tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
-              label={{
-                value: '← CV少ない　　　　　CV多い →',
-                position: 'bottom',
-                offset: 10,
-                style: { fontSize: 12, fill: '#6b7280' }
-              }}
-            />
-
-            {/* Y軸: 黒字/赤字 */}
-            <YAxis
-              type="number"
-              dataKey="y"
-              domain={[-100, 100]}
-              tick={{ fontSize: 11, fill: '#6b7280' }}
-              tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
-              label={{
-                value: '← 赤字　　　　黒字 →',
-                angle: -90,
-                position: 'left',
-                offset: 0,
-                style: { fontSize: 12, fill: '#6b7280', textAnchor: 'middle' }
-              }}
-            />
-
-            {/* Z軸: バブルサイズ（ROAS） */}
-            <ZAxis
-              type="number"
-              dataKey="z"
-              range={[60, 600]}
-              domain={[0.5, 2.0]}
-            />
-
-            {/* 中央の十字線（平均線） */}
-            <ReferenceLine x={0} stroke="#374151" strokeWidth={2} strokeDasharray="6 3" />
-            <ReferenceLine y={0} stroke="#374151" strokeWidth={2} strokeDasharray="6 3" />
-
-            <Scatter
-              data={chartData.points}
-              shape="circle"
-              isAnimationActive={false}
-            >
-              {chartData.points.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={QUADRANT_CONFIG[entry.quadrant].color}
-                  fillOpacity={0.85}
-                  stroke="#fff"
-                  strokeWidth={2}
-                />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
-
-        {/* ツールチップ（ホバー / チップにホバーで固定） */}
-        {tooltipState && (
-          <div
-            className="tooltip-container absolute z-50"
-            style={{
-              left: Math.min(tooltipState.x + 10, (chartContainerRef.current?.offsetWidth || 600) - 280),
-              top: Math.max(10, Math.min(tooltipState.y - 100, 280)),
-            }}
-            onMouseEnter={handleTooltipMouseEnter}
-            onMouseLeave={handleTooltipMouseLeave}
-          >
-            <TooltipContent data={tooltipState.data} onCreativeClick={onCreativeClick} />
-          </div>
-        )}
-
-        {/* 象限ラベル（背景に大きく表示）- z-index低めでツールチップの下に */}
-        {/* 左上: 拡大余地 - チャートエリア(60px〜50%)の中央 */}
+        {/* 象限ラベル */}
         <div
           className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"
           style={{ top: 'calc(40px + (100% - 100px) * 0.25)', left: 'calc(60px + (100% - 100px) * 0.25)' }}
         >
-          <span
-            className="text-4xl font-bold opacity-30"
-            style={{ color: QUADRANT_CONFIG[3].color }}
-          >
+          <span className="text-4xl font-bold opacity-30" style={{ color: QUADRANT_CONFIG[3].color }}>
             拡大余地
           </span>
         </div>
-        {/* 右上: 好調 - チャートエリア(50%〜右端-40px)の中央 */}
         <div
           className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"
           style={{ top: 'calc(40px + (100% - 100px) * 0.25)', left: 'calc(60px + (100% - 100px) * 0.75)' }}
         >
-          <span
-            className="text-4xl font-bold opacity-30"
-            style={{ color: QUADRANT_CONFIG[1].color }}
-          >
+          <span className="text-4xl font-bold opacity-30" style={{ color: QUADRANT_CONFIG[1].color }}>
             好調
           </span>
         </div>
-        {/* 左下: 停止検討 */}
         <div
           className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"
           style={{ top: 'calc(40px + (100% - 100px) * 0.75)', left: 'calc(60px + (100% - 100px) * 0.25)' }}
         >
-          <span
-            className="text-4xl font-bold opacity-30"
-            style={{ color: QUADRANT_CONFIG[4].color }}
-          >
+          <span className="text-4xl font-bold opacity-30" style={{ color: QUADRANT_CONFIG[4].color }}>
             停止検討
           </span>
         </div>
-        {/* 右下: 利益改善 */}
         <div
           className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0"
           style={{ top: 'calc(40px + (100% - 100px) * 0.75)', left: 'calc(60px + (100% - 100px) * 0.75)' }}
         >
-          <span
-            className="text-4xl font-bold opacity-30"
-            style={{ color: QUADRANT_CONFIG[2].color }}
-          >
+          <span className="text-4xl font-bold opacity-30" style={{ color: QUADRANT_CONFIG[2].color }}>
             利益改善
           </span>
         </div>
 
-        {/* 中央のラベル（横線=損益分岐、縦線=CV平均） */}
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-1 rounded text-xs text-gray-500 border border-gray-200 z-0">
           CV平均 / 損益分岐
         </div>
 
-        {/* CV=0エリアのラベル（左端） */}
         {chartData.cvZeroCount > 0 && (
           <div
             className="absolute pointer-events-none z-10"
