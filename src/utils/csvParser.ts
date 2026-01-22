@@ -93,6 +93,7 @@ export function calculateCreativeData(
       adSetName: raw.adSetName || '',
       projectName: matchedProject?.name || '未設定',
       creativeName,
+      creativeLink: '', // CSVインポートではリンクなし
       impressions: raw.impressions || 0,
       cpm: raw.cpm || 0,
       cv: raw.results || 0,

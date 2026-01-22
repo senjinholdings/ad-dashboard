@@ -31,6 +31,7 @@ const MAX_SLOTS = 15; // 最大スロット数
 interface SlotData {
   value: number;
   name: string;
+  link: string;
   color: string;
   slotIndex: number;
   side: 'pos' | 'neg';
@@ -159,6 +160,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
     // 日付ごと・クリエイティブごとに利益を集計
     const dailyMap = new Map<string, Map<string, number>>();
     const creativeSet = new Set<string>();
+    const creativeLinkMap = new Map<string, string>(); // クリエイティブ名→リンクのマップ
 
     data.forEach(item => {
       if (!item.date) return;
@@ -167,6 +169,11 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
       const creativeName = item.creativeName || '(未分類)';
 
       creativeSet.add(creativeName);
+
+      // リンクを保存（最初に見つかったものを使用）
+      if (item.creativeLink && !creativeLinkMap.has(creativeName)) {
+        creativeLinkMap.set(creativeName, item.creativeLink);
+      }
 
       if (!dailyMap.has(normalizedDate)) {
         dailyMap.set(normalizedDate, new Map());
@@ -207,7 +214,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
 
         // この日のクリエイティブを利益でソート
         const dayCreatives = Array.from(dayData.entries())
-          .map(([name, profit]) => ({ name, profit, color: colorMap[name] }))
+          .map(([name, profit]) => ({ name, profit, color: colorMap[name], link: creativeLinkMap.get(name) || '' }))
           .filter(c => c.profit !== 0);
 
         // プラスとマイナスに分離
@@ -226,6 +233,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
           result[`pos_${slotIndex}_data`] = {
             value: c.profit,
             name: c.name,
+            link: c.link,
             color: c.color,
             slotIndex,
             side: 'pos',
@@ -238,6 +246,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
           result[`neg_${i}_data`] = {
             value: c.profit,
             name: c.name,
+            link: c.link,
             color: c.color,
             slotIndex: i,
             side: 'neg',
@@ -455,7 +464,18 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
                       className="w-3 h-3 rounded-sm shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-gray-600 truncate">{item.name}</span>
+                    {item.link ? (
+                      <a
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate"
+                      >
+                        {item.name}
+                      </a>
+                    ) : (
+                      <span className="text-gray-600 truncate">{item.name}</span>
+                    )}
                   </div>
                   <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
                     {formatCurrencyFull(item.value)}

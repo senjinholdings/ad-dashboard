@@ -158,16 +158,44 @@ export function parseSpreadsheetCsv(csvText: string): SpreadsheetAdData[] {
     return [];
   }
 
-  // 1行目（インデックス0）がヘッダー
-  const headers = rows[0];
-  // 2行目以降がデータ
-  const dataRows = rows.slice(1);
+  // ヘッダー行を動的に検出（「日付」と「広告アカウント名」の両方を含む行を探す）
+  let headerRowIndex = 0;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const row = rows[i];
+    const rowText = row.join(' ');
+    // 「日付」と「広告アカウント名」の両方を含む行をヘッダーとする
+    const hasDate = rowText.includes('日付');
+    const hasAccountName = rowText.includes('広告アカウント名') || rowText.includes('アカウント名');
+    if (hasDate && hasAccountName) {
+      headerRowIndex = i;
+      console.log('DEBUG: ヘッダー行検出 - row', i, ':', row.slice(0, 10));
+      break;
+    }
+  }
+
+  const headers = rows[headerRowIndex];
+  // ヘッダー行の次の行からがデータ
+  const dataRows = rows.slice(headerRowIndex + 1);
+
+  // デバッグ: ヘッダーと最初のデータ行を出力
+  const dateHeaderIndex = headers.findIndex(h => h && (h.includes('日付') || h.includes('レポート開始日')));
+  console.log('DEBUG parseSpreadsheetCsv:', {
+    headerRowIndex,
+    allHeaders: headers,
+    dateHeaderIndex,
+    dateHeaderName: dateHeaderIndex >= 0 ? headers[dateHeaderIndex] : 'NOT FOUND',
+    firstRowDateValue: dateHeaderIndex >= 0 ? dataRows[0]?.[dateHeaderIndex] : 'N/A',
+    personNameHeaderIndex: headers.findIndex(h => h && h.includes('担当')),
+    firstDataRow: dataRows[0],
+    totalDataRows: dataRows.length
+  });
 
   return dataRows
     .filter((row) => {
-      // 空の行をスキップ
-      const firstValue = row[0];
-      return firstValue && firstValue.trim() !== '';
+      // 空の行をスキップ（広告アカウント名カラムで判定）
+      const accountNameIndex = headers.findIndex(h => h && (h.includes('広告アカウント名') || h.includes('アカウント名')));
+      const accountName = accountNameIndex >= 0 ? row[accountNameIndex] : row[0];
+      return accountName && accountName.trim() !== '';
     })
     .map((row) => {
       // ヘッダーとデータを組み合わせてオブジェクトに変換（部分一致対応）
@@ -291,7 +319,13 @@ export function parsePremiseSheetCsv(csvText: string): PremiseSheetData {
   return data;
 }
 
-// クリエイティブマスタをパース（A列の4行目以降がクリエイティブ名）
+// クリエイティブマスタの型（名前とリンク）
+export interface CreativeMaster {
+  name: string;
+  link: string;
+}
+
+// クリエイティブマスタをパース（A列: クリエイティブ名、C列: リンク）
 export function parseCreativeMasterCsv(csvText: string): string[] {
   // PapaParseで正しくパース（複数行にまたがる引用符付きフィールドに対応）
   const result = Papa.parse<string[]>(csvText, {
@@ -304,6 +338,27 @@ export function parseCreativeMasterCsv(csvText: string): string[] {
     .slice(3)
     .map(row => (row[0] || '').trim())
     .filter(name => name && name.length > 0);
+}
+
+// クリエイティブマスタをパース（名前とリンクのマップを返す）
+export function parseCreativeMasterWithLinks(csvText: string): Map<string, string> {
+  const result = Papa.parse<string[]>(csvText, {
+    header: false,
+    skipEmptyLines: true,
+  });
+
+  const linkMap = new Map<string, string>();
+
+  // 最初の3行をスキップし、A列（名前）とC列（リンク）を取得
+  result.data.slice(3).forEach(row => {
+    const name = (row[0] || '').trim();
+    const link = (row[2] || '').trim();
+    if (name && name.length > 0) {
+      linkMap.set(name, link);
+    }
+  });
+
+  return linkMap;
 }
 
 // 広告名からクリエイティブ名をマッチング

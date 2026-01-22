@@ -108,9 +108,21 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
                   <tr key={creative.creativeName} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-2">{getRankIcon(index)}</td>
                     <td className="py-4 px-2">
-                      <div className="font-medium text-gray-900 truncate max-w-[140px]" title={creative.creativeName}>
-                        {creative.creativeName}
-                      </div>
+                      {creative.creativeLink ? (
+                        <a
+                          href={creative.creativeLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate max-w-[140px] block"
+                          title={creative.creativeName}
+                        >
+                          {creative.creativeName}
+                        </a>
+                      ) : (
+                        <div className="font-medium text-gray-900 truncate max-w-[140px]" title={creative.creativeName}>
+                          {creative.creativeName}
+                        </div>
+                      )}
                       <div className="text-xs text-gray-500">
                         広告数: {creative.adCount}件
                       </div>
@@ -166,9 +178,21 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
                 {poorCreatives.map((creative) => (
                   <tr key={creative.creativeName} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-2">
-                      <div className="font-medium text-gray-900 truncate max-w-[150px]" title={creative.creativeName}>
-                        {creative.creativeName}
-                      </div>
+                      {creative.creativeLink ? (
+                        <a
+                          href={creative.creativeLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate max-w-[150px] block"
+                          title={creative.creativeName}
+                        >
+                          {creative.creativeName}
+                        </a>
+                      ) : (
+                        <div className="font-medium text-gray-900 truncate max-w-[150px]" title={creative.creativeName}>
+                          {creative.creativeName}
+                        </div>
+                      )}
                       <div className="text-xs text-gray-500">
                         広告数: {creative.adCount}件
                       </div>

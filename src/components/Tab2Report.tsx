@@ -3,13 +3,16 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CreativeData, AggregatedCreativeData } from '@/types';
 import { calculateSummary, assignCreativeStatus } from '@/utils/csvParser';
-import { loadCreatives, saveCreatives } from '@/utils/storage';
+import { loadCreativesFromIndexedDB, saveCreativesToIndexedDB } from '@/utils/indexedDB';
 import {
   loadSpreadsheetConfig,
   extractSpreadsheetId,
+  extractSheetGid,
+  fetchSpreadsheetData,
   fetchSpreadsheetDataByName,
   parseSpreadsheetCsv,
   parseCreativeMasterCsv,
+  parseCreativeMasterWithLinks,
   saveSpreadsheetConfig,
   SpreadsheetAdData,
 } from '@/utils/spreadsheet';
@@ -19,6 +22,7 @@ import CreativeTable from './CreativeTable';
 import DateRangePicker from './DateRangePicker';
 import DailyProfitChart from './DailyProfitChart';
 import MetricFilter, { MetricFilterConfig, MetricFilterType, applyFilter } from './MetricFilter';
+import MultiSelectDropdown from './MultiSelectDropdown';
 import { useReportDateRange } from '@/contexts/ReportDateRangeContext';
 import { useAccount } from '@/contexts/AccountContext';
 import { usePerson } from '@/contexts/PersonContext';
@@ -44,8 +48,9 @@ const TABLE_HEADERS: {
 ];
 
 // シート名（固定）
-const RAW_SHEET_NAME = 'raw';
 const CREATIVE_SHEET_NAME = 'クリエイティブ';
+// デフォルトのrawシートgid
+const DEFAULT_RAW_GID = '567193483';
 
 export default function Tab2Report() {
   const [creatives, setCreatives] = useState<CreativeData[]>([]);
@@ -54,23 +59,19 @@ export default function Tab2Report() {
 
   // データを読み込む（マウント時 & storageイベント時）
   useEffect(() => {
-    const loadData = () => {
-      setCreatives(loadCreatives());
+    const loadData = async () => {
+      const data = await loadCreativesFromIndexedDB();
+      setCreatives(data);
       setLastUpdated(loadSpreadsheetConfig()?.lastUpdated ?? null);
     };
 
     loadData();
 
-    // localStorageの変更を検知
-    const handleStorage = () => loadData();
-    window.addEventListener('storage', handleStorage);
-
-    // フォーカス時にも再読み込み
+    // localStorageの変更を検知（IndexedDBは対応していないため、focusイベントで対応）
     const handleFocus = () => loadData();
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', handleFocus);
     };
   }, []);
@@ -83,19 +84,22 @@ export default function Tab2Report() {
     setIsRefreshing(true);
 
     try {
-      // クリエイティブマスタを取得
+      // クリエイティブマスタを取得（名前とリンク）
       let masterCreativeNames: string[] = [];
+      let creativeLinkMap: Map<string, string> = new Map();
       try {
         const creativeCsvText = await fetchSpreadsheetDataByName(config.spreadsheetId, CREATIVE_SHEET_NAME);
         masterCreativeNames = parseCreativeMasterCsv(creativeCsvText);
+        creativeLinkMap = parseCreativeMasterWithLinks(creativeCsvText);
       } catch (err) {
         console.warn('クリエイティブマスタの取得に失敗しました:', err);
       }
 
       const sortedCreativeNames = [...masterCreativeNames].sort((a, b) => b.length - a.length);
 
-      // rawシートからCSVデータを取得
-      const csvText = await fetchSpreadsheetDataByName(config.spreadsheetId, RAW_SHEET_NAME);
+      // rawシートからCSVデータを取得（URLのgidまたはデフォルトgidを使用）
+      const rawGid = extractSheetGid(config.url) || DEFAULT_RAW_GID;
+      const csvText = await fetchSpreadsheetData(config.spreadsheetId, rawGid);
       const rawData = parseSpreadsheetCsv(csvText);
 
       // スプレッドシートデータをCreativeDataに変換
@@ -119,6 +123,7 @@ export default function Tab2Report() {
           adSetName: row.adSetName || '',
           projectName: row.projectName || '未設定',
           creativeName: matchedCreativeName,
+          creativeLink: creativeLinkMap.get(matchedCreativeName) || '',
           impressions: row.impressions || 0,
           cpm: row.cpm || 0,
           cv: row.results || 0,
@@ -132,7 +137,7 @@ export default function Tab2Report() {
       });
       const withStatus = assignCreativeStatus(calculated);
 
-      saveCreatives(withStatus);
+      await saveCreativesToIndexedDB(withStatus);
       setCreatives(withStatus);
 
       // 設定を更新
@@ -234,6 +239,7 @@ export default function Tab2Report() {
   const aggregatedByCreative = useMemo((): AggregatedCreativeData[] => {
     const grouped = new Map<string, {
       creativeName: string;
+      creativeLink: string;
       adCount: number;
       impressions: number;
       cv: number;
@@ -255,6 +261,7 @@ export default function Tab2Report() {
       } else {
         grouped.set(name, {
           creativeName: name,
+          creativeLink: c.creativeLink || '',
           adCount: 1,
           impressions: c.impressions || 0,
           cv: c.cv || 0,
@@ -380,57 +387,29 @@ export default function Tab2Report() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* 担当者選択 */}
+          {/* 担当者選択（複数選択可能） */}
           {personNames.length > 0 && (
-            <div className="relative">
-              <select
-                value={selectedPersons.length === 0 ? 'all' : selectedPersons[0]}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'all') {
-                    setSelectedPersons([]);
-                  } else {
-                    setSelectedPersons([value]);
-                  }
-                }}
-                title={selectedPersons.length === 0 ? '全担当者' : selectedPersons[0]}
-                className="appearance-none bg-white border border-[#cfe7e7] rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-[#0b7f7b] focus:outline-none focus:ring-2 focus:ring-[#0b7f7b]/20 focus:border-[#0b7f7b] transition-colors cursor-pointer w-[120px] truncate"
-              >
-                <option value="all">全担当者</option>
-                {personNames.map(name => (
-                  <option key={name} value={name} title={name}>{name}</option>
-                ))}
-              </select>
-              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-lg">
-                expand_more
-              </span>
-            </div>
+            <MultiSelectDropdown
+              options={personNames}
+              selectedValues={selectedPersons}
+              onChange={setSelectedPersons}
+              placeholder="担当者を選択"
+              searchPlaceholder="担当者を検索..."
+              allLabel="全担当者"
+              width="w-[140px]"
+            />
           )}
-          {/* アカウント選択 */}
+          {/* アカウント選択（複数選択可能） */}
           {accountNames.length > 0 && (
-            <div className="relative">
-              <select
-                value={selectedAccounts.length === 0 ? 'all' : selectedAccounts[0]}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'all') {
-                    setSelectedAccounts([]);
-                  } else {
-                    setSelectedAccounts([value]);
-                  }
-                }}
-                title={selectedAccounts.length === 0 ? '全アカウント' : selectedAccounts[0]}
-                className="appearance-none bg-white border border-[#cfe7e7] rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-[#0b7f7b] focus:outline-none focus:ring-2 focus:ring-[#0b7f7b]/20 focus:border-[#0b7f7b] transition-colors cursor-pointer w-[180px] truncate"
-              >
-                <option value="all">全アカウント</option>
-                {accountNames.map(name => (
-                  <option key={name} value={name} title={name}>{name}</option>
-                ))}
-              </select>
-              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-lg">
-                expand_more
-              </span>
-            </div>
+            <MultiSelectDropdown
+              options={accountNames}
+              selectedValues={selectedAccounts}
+              onChange={setSelectedAccounts}
+              placeholder="アカウントを選択"
+              searchPlaceholder="アカウントを検索..."
+              allLabel="全アカウント"
+              width="w-[180px]"
+            />
           )}
           <DateRangePicker
             value={preset}

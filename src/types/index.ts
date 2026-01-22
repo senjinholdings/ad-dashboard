@@ -29,6 +29,7 @@ export interface CreativeData {
   adSetName: string;
   projectName: string;
   creativeName: string; // マッチしたクリエイティブ名
+  creativeLink: string; // クリエイティブへのリンク
   impressions: number;
   cpm: number;
   cv: number;
@@ -43,6 +44,7 @@ export interface CreativeData {
 // CR単位の集計データ
 export interface AggregatedCreativeData {
   creativeName: string;
+  creativeLink: string; // クリエイティブへのリンク
   adCount: number;
   impressions: number;
   cpm: number;

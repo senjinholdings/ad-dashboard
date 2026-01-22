@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { CreativeData } from '@/types';
-import { loadCreatives, saveCreatives } from '@/utils/storage';
+import { saveCreativesToIndexedDB, loadCreativesFromIndexedDB, clearAllDataFromIndexedDB } from '@/utils/indexedDB';
 import { assignCreativeStatus } from '@/utils/csvParser';
 import {
   extractSpreadsheetId,
+  extractSheetGid,
+  fetchSpreadsheetData,
   fetchSpreadsheetDataByName,
   parseSpreadsheetCsv,
   parseCreativeMasterCsv,
+  parseCreativeMasterWithLinks,
   saveSpreadsheetConfig,
   loadSpreadsheetConfig,
   clearSpreadsheetConfig,
@@ -17,8 +20,9 @@ import {
 } from '@/utils/spreadsheet';
 
 // シート名（固定）
-const RAW_SHEET_NAME = 'raw';
 const CREATIVE_SHEET_NAME = 'クリエイティブ';
+// デフォルトのrawシートgid
+const DEFAULT_RAW_GID = '567193483';
 
 // デフォルトのスプレッドシートURL
 const DEFAULT_SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1QJRcFG1wiw7n8V09WSKVNMCU75F380VY88hJ84uuPw4/edit?gid=567193483#gid=567193483';
@@ -42,7 +46,10 @@ export default function TabSettings() {
   const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
-    setCreativesCount(loadCreatives().length);
+    // IndexedDBから非同期でクリエイティブ数を取得
+    loadCreativesFromIndexedDB().then(creatives => {
+      setCreativesCount(creatives.length);
+    });
 
     const savedConfig = loadSpreadsheetConfig();
     if (savedConfig) {
@@ -65,11 +72,13 @@ export default function TabSettings() {
         throw new Error('無効なスプレッドシートURLです。Google スプレッドシートのURLを入力してください。');
       }
 
-      // クリエイティブマスタを取得
+      // クリエイティブマスタを取得（名前とリンク）
       let masterCreativeNames: string[] = [];
+      let creativeLinkMap: Map<string, string> = new Map();
       try {
         const creativeCsvText = await fetchSpreadsheetDataByName(spreadsheetId, CREATIVE_SHEET_NAME);
         masterCreativeNames = parseCreativeMasterCsv(creativeCsvText);
+        creativeLinkMap = parseCreativeMasterWithLinks(creativeCsvText);
         setCreativeNames(masterCreativeNames);
       } catch (err) {
         console.warn('クリエイティブマスタの取得に失敗しました:', err);
@@ -77,8 +86,9 @@ export default function TabSettings() {
 
       const sortedCreativeNames = [...masterCreativeNames].sort((a, b) => b.length - a.length);
 
-      // rawシートからCSVデータを取得
-      const csvText = await fetchSpreadsheetDataByName(spreadsheetId, RAW_SHEET_NAME);
+      // rawシートからCSVデータを取得（URLのgidまたはデフォルトgidを使用）
+      const rawGid = extractSheetGid(url) || DEFAULT_RAW_GID;
+      const csvText = await fetchSpreadsheetData(spreadsheetId, rawGid);
       const rawData = parseSpreadsheetCsv(csvText);
 
       if (rawData.length === 0) {
@@ -106,6 +116,7 @@ export default function TabSettings() {
           adSetName: row.adSetName || '',
           projectName: row.projectName || '未設定',
           creativeName: matchedCreativeName,
+          creativeLink: creativeLinkMap.get(matchedCreativeName) || '',
           impressions: row.impressions || 0,
           cpm: row.cpm || 0,
           cv: row.results || 0,
@@ -119,7 +130,7 @@ export default function TabSettings() {
       });
       const withStatus = assignCreativeStatus(calculated);
 
-      saveCreatives(withStatus);
+      await saveCreativesToIndexedDB(withStatus);
       setCreativesCount(withStatus.length);
 
       const config: SpreadsheetConfig = {
@@ -153,7 +164,7 @@ export default function TabSettings() {
     }
   };
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     setSpreadsheetUrl(DEFAULT_SPREADSHEET_URL);
     setSpreadsheetConfig(null);
     setCreativeNames([]);
@@ -161,7 +172,7 @@ export default function TabSettings() {
     setLastSyncResult(null);
     clearSpreadsheetConfig();
     clearPremiseData();
-    saveCreatives([]);
+    await clearAllDataFromIndexedDB();
   };
 
   return (
@@ -204,7 +215,7 @@ export default function TabSettings() {
                   <div className="flex flex-wrap gap-2 mt-2">
                     <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 rounded text-xs text-green-700">
                       <span className="material-symbols-outlined text-sm">table_chart</span>
-                      {RAW_SHEET_NAME}
+                      データシート
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 rounded text-xs text-green-700">
                       <span className="material-symbols-outlined text-sm">palette</span>
@@ -313,7 +324,7 @@ export default function TabSettings() {
               </ol>
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <p className="text-xs text-gray-500">
-                  必要なシート: 「{RAW_SHEET_NAME}」「{CREATIVE_SHEET_NAME}」
+                  必要なシート: 「{CREATIVE_SHEET_NAME}」（URLで指定されたシートのデータを取得）
                 </p>
               </div>
             </div>

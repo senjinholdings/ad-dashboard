@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   ScatterChart,
   Scatter,
@@ -8,7 +8,6 @@ import {
   YAxis,
   ZAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
@@ -41,31 +40,38 @@ interface BubbleDataItem extends AggregatedCreativeData {
   roasVsAvg: number;   // ROAS平均比 (%)
 }
 
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    payload: BubbleDataItem;
-  }>;
-}
-
-function CustomTooltip({ active, payload }: CustomTooltipProps) {
-  if (!active || !payload || !payload.length) return null;
-
-  const data = payload[0].payload;
+// ツールチップ内容コンポーネント
+function TooltipContent({ data, isPinned }: { data: BubbleDataItem; isPinned?: boolean }) {
   const config = QUADRANT_CONFIG[data.quadrant];
 
   return (
     <div className="border border-[#cfe7e7] rounded-xl shadow-xl p-4 max-w-sm" style={{ backgroundColor: '#ffffff', boxShadow: '0 0 0 1px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}>
       <div className="flex items-center justify-between mb-2">
-        <p className="font-semibold text-gray-900 truncate flex-1 mr-2">{data.creativeName}</p>
+        {data.creativeLink ? (
+          <a
+            href={data.creativeLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate flex-1 mr-2"
+          >
+            {data.creativeName}
+          </a>
+        ) : (
+          <p className="font-semibold text-gray-900 truncate flex-1 mr-2">{data.creativeName}</p>
+        )}
+        {isPinned && (
+          <span className="text-xs text-gray-400 ml-2 shrink-0">リンク可</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mb-3">
         <span
-          className="px-2 py-0.5 rounded-full text-xs font-medium text-white shrink-0"
+          className="px-2 py-0.5 rounded-full text-xs font-medium text-white"
           style={{ backgroundColor: config.color }}
         >
           {config.name}
         </span>
+        <span className="text-sm text-gray-500">広告数: {data.adCount}件</span>
       </div>
-      <p className="text-sm text-gray-500 truncate mb-3">広告数: {data.adCount}件</p>
 
       <div className="space-y-2 text-sm">
         <div className="flex justify-between items-center">
@@ -136,7 +142,80 @@ function calculateBubbleSize(roas: number, avgROAS: number): number {
   return Math.max(0.5, Math.min(2.0, ratio));
 }
 
+// ツールチップ状態の型
+interface TooltipState {
+  data: BubbleDataItem;
+  x: number;
+  y: number;
+}
+
 export default function MatrixChart({ data }: MatrixChartProps) {
+  const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
+  const [isTooltipPinned, setIsTooltipPinned] = useState(false);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTooltipPinnedRef = useRef(false);
+
+  // ツールチップを非表示にするタイムアウトをクリア
+  const clearHideTimeout = useCallback(() => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+  }, []);
+
+  // ツールチップを遅延非表示
+  const scheduleHide = useCallback(() => {
+    clearHideTimeout();
+    hideTimeoutRef.current = setTimeout(() => {
+      if (!isTooltipPinnedRef.current) {
+        setTooltipState(null);
+      }
+    }, 300);
+  }, [clearHideTimeout]);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // ホバー時のツールチップ表示（固定中は更新しない）
+  const handlePointHover = useCallback((pointData: BubbleDataItem | null, event?: React.MouseEvent) => {
+    if (isTooltipPinnedRef.current) return; // 固定中は更新しない
+
+    if (!pointData || !event) {
+      scheduleHide();
+      return;
+    }
+
+    clearHideTimeout();
+    const rect = chartContainerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    setTooltipState({ data: pointData, x, y });
+  }, [clearHideTimeout, scheduleHide]);
+
+  // ツールチップにマウスが入った → 固定
+  const handleTooltipMouseEnter = useCallback(() => {
+    clearHideTimeout();
+    isTooltipPinnedRef.current = true;
+    setIsTooltipPinned(true);
+  }, [clearHideTimeout]);
+
+  // ツールチップからマウスが離れた → 固定解除
+  const handleTooltipMouseLeave = useCallback(() => {
+    isTooltipPinnedRef.current = false;
+    setIsTooltipPinned(false);
+    scheduleHide();
+  }, [scheduleHide]);
+
   const chartData = useMemo(() => {
     // CV > 0 のデータ
     const cvPositiveData = data.filter(c => c.cv > 0 && c.cost > 0);
@@ -359,7 +438,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
         </div>
       </div>
 
-      <div className="h-[480px] relative">
+      <div className="h-[480px] relative" ref={chartContainerRef}>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 40, right: 40, bottom: 60, left: 60 }}>
             {/* 4象限の背景色 */}
@@ -417,9 +496,18 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             <ReferenceLine x={0} stroke="#374151" strokeWidth={2} strokeDasharray="6 3" />
             <ReferenceLine y={0} stroke="#374151" strokeWidth={2} strokeDasharray="6 3" />
 
-            <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 1000, backgroundColor: 'transparent', border: 'none', outline: 'none' }} />
-
-            <Scatter data={chartData.points} shape="circle">
+            <Scatter
+              data={chartData.points}
+              shape="circle"
+              onMouseEnter={(pointData, _index, event) => {
+                if (pointData && event) {
+                  handlePointHover(pointData as BubbleDataItem, event as unknown as React.MouseEvent);
+                }
+              }}
+              onMouseLeave={() => {
+                handlePointHover(null);
+              }}
+            >
               {chartData.points.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
@@ -432,6 +520,21 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             </Scatter>
           </ScatterChart>
         </ResponsiveContainer>
+
+        {/* ツールチップ（ホバー / チップにホバーで固定） */}
+        {tooltipState && (
+          <div
+            className="tooltip-container absolute z-50"
+            style={{
+              left: Math.min(tooltipState.x + 10, (chartContainerRef.current?.offsetWidth || 600) - 280),
+              top: Math.max(10, Math.min(tooltipState.y - 100, 280)),
+            }}
+            onMouseEnter={handleTooltipMouseEnter}
+            onMouseLeave={handleTooltipMouseLeave}
+          >
+            <TooltipContent data={tooltipState.data} isPinned={isTooltipPinned} />
+          </div>
+        )}
 
         {/* 象限ラベル（背景に大きく表示）- z-index低めでツールチップの下に */}
         {/* 左上: 拡大余地 - チャートエリア(60px〜50%)の中央 */}

@@ -55,7 +55,10 @@ export function saveData(data: Partial<DashboardData>): void {
       ...data,
       lastUpdated: new Date().toISOString(),
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    const jsonStr = JSON.stringify(updated);
+    console.log('DEBUG saveData: attempting to save', jsonStr.length, 'bytes, creatives count:', updated.creatives?.length || 0);
+    localStorage.setItem(STORAGE_KEY, jsonStr);
+    console.log('DEBUG saveData: success');
   } catch (error) {
     console.error('Failed to save data to localStorage:', error);
   }

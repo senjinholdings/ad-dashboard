@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   loadSpreadsheetConfig,
   fetchSpreadsheetDataByName,
@@ -8,7 +8,7 @@ import {
   PremiseSheetData,
   defaultPremiseSheetData,
 } from '@/utils/spreadsheet';
-import { loadCreatives } from '@/utils/storage';
+import { loadCreativesFromIndexedDB } from '@/utils/indexedDB';
 
 // localStorage操作
 const PREMISE_STORAGE_KEY = 'ad-dashboard-premise-data';
@@ -45,17 +45,19 @@ export default function Tab1Premise() {
   const [selectedPerson, setSelectedPerson] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [personNames, setPersonNames] = useState<string[]>([]);
 
-  // 担当者リストを取得
-  const personNames = useMemo(() => {
-    const creatives = loadCreatives();
-    const names = new Set<string>();
-    creatives.forEach((c) => {
-      if (c.personName) {
-        names.add(c.personName);
-      }
+  // 担当者リストを取得（IndexedDBから非同期で）
+  useEffect(() => {
+    loadCreativesFromIndexedDB().then((creatives) => {
+      const names = new Set<string>();
+      creatives.forEach((c) => {
+        if (c.personName) {
+          names.add(c.personName);
+        }
+      });
+      setPersonNames(Array.from(names).sort());
     });
-    return Array.from(names).sort();
   }, []);
 
   // 初期選択を設定
