@@ -52,6 +52,9 @@ interface TooltipState {
   y: number;
 }
 
+// チャートのマージン設定
+const CHART_MARGIN = { top: 20, right: 30, left: 20, bottom: 60 };
+
 export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitChartProps) {
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
   const [isTooltipPinned, setIsTooltipPinned] = useState(false);
@@ -61,7 +64,7 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
   const lastThrottleTimeRef = useRef(0);
-  const pendingStateRef = useRef<TooltipState | null>(null);
+  const chartDataRef = useRef<DailyData[]>([]);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -81,34 +84,49 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     }, 400);
   }, [clearHideTimeout]);
 
-  // チャートのマウスムーブ - throttleで頻度制限（100ms間隔）
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleChartMouseMove = useCallback((state: any, chartDataRef: DailyData[]) => {
+  // 独自のマウスムーブハンドラ - X座標から直接インデックスを計算
+  const handleNativeMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    const index = state?.activeTooltipIndex;
+    if (now - lastThrottleTimeRef.current < 50) return; // 50ms throttle
 
-    if (index !== undefined && index >= 0 && index < chartDataRef.length && state?.activeCoordinate) {
-      const dayData = chartDataRef[index];
-      const newState: TooltipState = {
-        dayData,
-        label: dayData.displayDate,
-        x: state.activeCoordinate.x,
-        y: state.activeCoordinate.y,
-      };
+    const container = chartContainerRef.current;
+    const chartData = chartDataRef.current;
+    if (!container || chartData.length === 0) return;
 
-      // 100ms以上経過していれば即座に更新
-      if (now - lastThrottleTimeRef.current >= 100) {
-        lastThrottleTimeRef.current = now;
-        clearHideTimeout();
-        setTooltipState(newState);
-      } else {
-        // そうでなければ保留（次回のthrottle時に使用）
-        pendingStateRef.current = newState;
-      }
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // チャート描画エリアの計算
+    const chartLeft = CHART_MARGIN.left;
+    const chartRight = containerWidth - CHART_MARGIN.right;
+    const chartWidth = chartRight - chartLeft;
+
+    // X座標がチャートエリア外なら無視
+    if (x < chartLeft || x > chartRight) {
+      scheduleHide();
+      return;
     }
-  }, [clearHideTimeout]);
+
+    // X座標からインデックスを計算
+    const relativeX = x - chartLeft;
+    const index = Math.floor((relativeX / chartWidth) * chartData.length);
+    const clampedIndex = Math.max(0, Math.min(chartData.length - 1, index));
+
+    const dayData = chartData[clampedIndex];
+    if (!dayData) return;
+
+    lastThrottleTimeRef.current = now;
+    clearHideTimeout();
+    setTooltipState({
+      dayData,
+      label: dayData.displayDate,
+      x,
+      y,
+    });
+  }, [containerWidth, clearHideTimeout, scheduleHide]);
 
   // チャートからマウスが離れた
   const handleChartMouseLeave = useCallback(() => {
@@ -293,6 +311,11 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     };
   }, [data]);
 
+  // chartDataRefを更新（独自マウスイベント用）
+  useEffect(() => {
+    chartDataRef.current = chartData;
+  }, [chartData]);
+
   // ツールチップの内容を生成
   const tooltipItems = useMemo(() => {
     if (!tooltipState) return [];
@@ -370,14 +393,14 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
       <div
         className="h-[400px] relative"
         ref={chartContainerRef}
+        onMouseMove={handleNativeMouseMove}
         onMouseLeave={handleChartMouseLeave}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+            margin={CHART_MARGIN}
             stackOffset="sign"
-            onMouseMove={(state) => handleChartMouseMove(state, chartData)}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis

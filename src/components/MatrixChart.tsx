@@ -145,12 +145,35 @@ interface TooltipState {
   y: number;
 }
 
+// チャートのマージン設定
+const CHART_MARGIN = { top: 40, right: 40, bottom: 60, left: 60 };
+const HIT_RADIUS = 20; // ヒット判定の半径（ピクセル）
+
 export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps) {
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
   const lastThrottleTimeRef = useRef(0);
+  const chartPointsRef = useRef<BubbleDataItem[]>([]);
+
+  // コンテナサイズを監視
+  useEffect(() => {
+    const element = chartContainerRef.current;
+    if (!element) return;
+
+    const updateSize = () => {
+      setContainerSize({ width: element.offsetWidth, height: element.offsetHeight });
+    };
+    updateSize();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateSize);
+      observer.observe(element);
+      return () => observer.disconnect();
+    }
+  }, []);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -179,29 +202,60 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     };
   }, []);
 
-  // ホバー時のツールチップ表示（固定中は更新しない）- throttleで頻度制限
-  const handlePointHover = useCallback((pointData: BubbleDataItem | null, event?: React.MouseEvent) => {
+  // 独自のマウスムーブハンドラ - 最も近いポイントを探す
+  const handleNativeMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (isTooltipPinnedRef.current) return;
 
-    if (!pointData || !event) {
-      scheduleHide();
-      return;
+    const now = Date.now();
+    if (now - lastThrottleTimeRef.current < 50) return; // 50ms throttle
+
+    const container = chartContainerRef.current;
+    const points = chartPointsRef.current;
+    if (!container || points.length === 0) return;
+
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // チャート描画エリアの計算
+    const chartLeft = CHART_MARGIN.left;
+    const chartTop = CHART_MARGIN.top;
+    const chartWidth = containerSize.width - CHART_MARGIN.left - CHART_MARGIN.right;
+    const chartHeight = containerSize.height - CHART_MARGIN.top - CHART_MARGIN.bottom;
+
+    if (chartWidth <= 0 || chartHeight <= 0) return;
+
+    // マウス座標を-100〜100の座標系に変換
+    const dataX = ((mouseX - chartLeft) / chartWidth) * 200 - 100;
+    const dataY = 100 - ((mouseY - chartTop) / chartHeight) * 200;
+
+    // 最も近いポイントを探す
+    let closestPoint: BubbleDataItem | null = null;
+    let closestDistSq = Infinity;
+
+    for (const point of points) {
+      // ポイントのピクセル座標を計算
+      const pointPixelX = chartLeft + ((point.x + 100) / 200) * chartWidth;
+      const pointPixelY = chartTop + ((100 - point.y) / 200) * chartHeight;
+
+      const dx = mouseX - pointPixelX;
+      const dy = mouseY - pointPixelY;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < closestDistSq && distSq < HIT_RADIUS * HIT_RADIUS) {
+        closestDistSq = distSq;
+        closestPoint = point;
+      }
     }
 
-    const now = Date.now();
-    // 100ms以上経過していれば更新
-    if (now - lastThrottleTimeRef.current >= 100) {
+    if (closestPoint) {
       lastThrottleTimeRef.current = now;
       clearHideTimeout();
-
-      const rect = chartContainerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      setTooltipState({ data: pointData, x, y });
+      setTooltipState({ data: closestPoint, x: mouseX, y: mouseY });
+    } else {
+      scheduleHide();
     }
-  }, [clearHideTimeout, scheduleHide]);
+  }, [containerSize, clearHideTimeout, scheduleHide]);
 
   // ツールチップにマウスが入った → 固定
   const handleTooltipMouseEnter = useCallback(() => {
@@ -344,6 +398,11 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     return { points, avgCV, avgROAS, counts, cvZeroCount: cvZeroData.length, profitCount, lossCount };
   }, [data]);
 
+  // chartPointsRefを更新（独自マウスイベント用）
+  useEffect(() => {
+    chartPointsRef.current = chartData.points;
+  }, [chartData.points]);
+
   // CV > 0 のデータ数
   const validDataCount = data.filter(c => c.cv > 0 && c.cost > 0).length;
 
@@ -437,9 +496,14 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
         </div>
       </div>
 
-      <div className="h-[480px] relative" ref={chartContainerRef}>
+      <div
+        className="h-[480px] relative"
+        ref={chartContainerRef}
+        onMouseMove={handleNativeMouseMove}
+        onMouseLeave={scheduleHide}
+      >
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 40, right: 40, bottom: 60, left: 60 }}>
+          <ScatterChart margin={CHART_MARGIN}>
             {/* 4象限の背景色 */}
             {/* 左上: 拡大余地 (x < 0, y > 0) */}
             <ReferenceArea x1={-100} x2={0} y1={0} y2={100} fill={QUADRANT_CONFIG[3].bgColor} fillOpacity={0.6} />
@@ -498,14 +562,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
             <Scatter
               data={chartData.points}
               shape="circle"
-              onMouseEnter={(pointData, _index, event) => {
-                if (pointData && event) {
-                  handlePointHover(pointData as BubbleDataItem, event as unknown as React.MouseEvent);
-                }
-              }}
-              onMouseLeave={() => {
-                handlePointHover(null);
-              }}
+              isAnimationActive={false}
             >
               {chartData.points.map((entry, index) => (
                 <Cell
