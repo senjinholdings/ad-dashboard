@@ -528,9 +528,13 @@ export default function Tab2Report() {
                 filteredAndSortedCreatives.map((cr) => (
                   <tr key={cr.creativeName} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-3">
-                      <span className="truncate block max-w-[200px] font-medium text-gray-800" title={cr.creativeName}>
+                      <button
+                        onClick={() => openSidebar(cr.creativeName, cr.creativeLink)}
+                        className="truncate block max-w-[200px] font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline text-left cursor-pointer"
+                        title={cr.creativeName}
+                      >
                         {cr.creativeName}
-                      </span>
+                      </button>
                     </td>
                     <td className="py-3 px-3 text-right text-gray-600">{cr.adCount}</td>
                     <td className="py-3 px-3 text-right text-gray-800">{cr.impressions.toLocaleString()}</td>
