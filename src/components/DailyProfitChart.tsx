@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { CreativeData } from '@/types';
 import { formatCurrencyFull } from '@/utils/csvParser';
+import CreativePreviewModal from './CreativePreviewModal';
 
 interface DailyProfitChartProps {
   data: CreativeData[];
@@ -51,14 +52,24 @@ interface TooltipState {
   y: number;
 }
 
+interface PreviewState {
+  url: string;
+  title: string;
+}
+
 export default function DailyProfitChart({ data }: DailyProfitChartProps) {
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
   const [isTooltipPinned, setIsTooltipPinned] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
+
+  const handlePreviewClick = useCallback((url: string, title: string) => {
+    setPreview({ url, title });
+  }, []);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -465,14 +476,12 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
                       style={{ backgroundColor: item.color }}
                     />
                     {item.link ? (
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate"
+                      <button
+                        onClick={() => handlePreviewClick(item.link, item.name)}
+                        className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate text-left cursor-pointer"
                       >
                         {item.name}
-                      </a>
+                      </button>
                     ) : (
                       <span className="text-gray-600 truncate">{item.name}</span>
                     )}
@@ -493,6 +502,14 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
           </div>
         )}
       </div>
+
+      {/* プレビューモーダル */}
+      <CreativePreviewModal
+        isOpen={preview !== null}
+        onClose={() => setPreview(null)}
+        url={preview?.url || ''}
+        title={preview?.title}
+      />
     </div>
   );
 }
