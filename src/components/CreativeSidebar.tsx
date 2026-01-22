@@ -77,8 +77,11 @@ export default function CreativeSidebar({
   }, [isOpen, handleKeyDown]);
 
   // このクリエイティブのデータを集計
-  const { metrics, dailyData } = useMemo(() => {
+  const { metrics, dailyData, personName } = useMemo(() => {
     const filtered = allData.filter(d => d.creativeName === creativeName);
+
+    // 担当者を取得（最初に見つかったものを使用）
+    const personName = filtered.length > 0 ? filtered[0].personName : '';
 
     // 合計値を計算
     const totalCV = filtered.reduce((sum, d) => sum + d.cv, 0);
@@ -122,6 +125,7 @@ export default function CreativeSidebar({
         adCount: filtered.length,
       },
       dailyData,
+      personName,
     };
   }, [allData, creativeName]);
 
@@ -133,7 +137,10 @@ export default function CreativeSidebar({
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="material-symbols-outlined text-[#0b7f7b]">movie</span>
-          <span className="font-semibold text-gray-800 truncate">{creativeName}</span>
+          <span className="font-semibold text-gray-800 truncate">
+            {creativeName}
+            {personName && <span className="text-gray-500 font-normal">（{personName}）</span>}
+          </span>
         </div>
         <button
           onClick={onClose}
