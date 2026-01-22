@@ -191,7 +191,7 @@ export default function DateRangePicker({ value, customRange, onChange }: DateRa
           {/* モーダル本体（コンパクト版） */}
           <div
             ref={modalRef}
-            className="fixed z-[9999] bg-white rounded-xl border border-gray-200 shadow-lg flex overflow-hidden"
+            className="fixed z-[9999] bg-white rounded-xl border border-gray-200 shadow-lg flex overflow-hidden overscroll-contain"
             style={{
               top: modalPosition.top,
               left: modalPosition.left,

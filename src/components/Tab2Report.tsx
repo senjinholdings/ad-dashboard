@@ -475,7 +475,7 @@ export default function Tab2Report() {
             </button>
           )}
         </div>
-        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+        <div className="overflow-x-auto max-h-96 overflow-y-auto overscroll-contain">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-[#cfe7e7]">

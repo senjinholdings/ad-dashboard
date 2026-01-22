@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { AggregatedCreativeData } from '@/types';
 import { formatCurrency, formatNumber, formatPercent } from '@/utils/csvParser';
+import CreativePreviewModal from './CreativePreviewModal';
 
 interface MatrixChartProps {
   data: AggregatedCreativeData[];
@@ -41,26 +42,21 @@ interface BubbleDataItem extends AggregatedCreativeData {
 }
 
 // ツールチップ内容コンポーネント
-function TooltipContent({ data, isPinned }: { data: BubbleDataItem; isPinned?: boolean }) {
+function TooltipContent({ data, onPreviewClick }: { data: BubbleDataItem; onPreviewClick?: (url: string, title: string) => void }) {
   const config = QUADRANT_CONFIG[data.quadrant];
 
   return (
-    <div className="border border-[#cfe7e7] rounded-xl shadow-xl p-4 max-w-sm" style={{ backgroundColor: '#ffffff', boxShadow: '0 0 0 1px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}>
+    <div className="border border-[#cfe7e7] rounded-xl shadow-xl p-4 max-w-sm overscroll-contain" style={{ backgroundColor: '#ffffff', boxShadow: '0 0 0 1px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}>
       <div className="flex items-center justify-between mb-2">
         {data.creativeLink ? (
-          <a
-            href={data.creativeLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate flex-1 mr-2"
+          <button
+            onClick={() => onPreviewClick?.(data.creativeLink, data.creativeName)}
+            className="font-semibold text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate flex-1 mr-2 text-left cursor-pointer"
           >
             {data.creativeName}
-          </a>
+          </button>
         ) : (
           <p className="font-semibold text-gray-900 truncate flex-1 mr-2">{data.creativeName}</p>
-        )}
-        {isPinned && (
-          <span className="text-xs text-gray-400 ml-2 shrink-0">リンク可</span>
         )}
       </div>
       <div className="flex items-center gap-2 mb-3">
@@ -149,12 +145,21 @@ interface TooltipState {
   y: number;
 }
 
+interface PreviewState {
+  url: string;
+  title: string;
+}
+
 export default function MatrixChart({ data }: MatrixChartProps) {
   const [tooltipState, setTooltipState] = useState<TooltipState | null>(null);
-  const [isTooltipPinned, setIsTooltipPinned] = useState(false);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTooltipPinnedRef = useRef(false);
+
+  const handlePreviewClick = useCallback((url: string, title: string) => {
+    setPreview({ url, title });
+  }, []);
 
   // ツールチップを非表示にするタイムアウトをクリア
   const clearHideTimeout = useCallback(() => {
@@ -532,7 +537,7 @@ export default function MatrixChart({ data }: MatrixChartProps) {
             onMouseEnter={handleTooltipMouseEnter}
             onMouseLeave={handleTooltipMouseLeave}
           >
-            <TooltipContent data={tooltipState.data} isPinned={isTooltipPinned} />
+            <TooltipContent data={tooltipState.data} onPreviewClick={handlePreviewClick} />
           </div>
         )}
 
@@ -612,6 +617,13 @@ export default function MatrixChart({ data }: MatrixChartProps) {
         )}
       </div>
 
+      {/* プレビューモーダル */}
+      <CreativePreviewModal
+        isOpen={preview !== null}
+        onClose={() => setPreview(null)}
+        url={preview?.url || ''}
+        title={preview?.title}
+      />
     </div>
   );
 }

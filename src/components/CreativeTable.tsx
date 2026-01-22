@@ -1,11 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { AggregatedCreativeData } from '@/types';
 import { formatCurrency, formatNumber, formatPercent } from '@/utils/csvParser';
+import CreativePreviewModal from './CreativePreviewModal';
 
 interface CreativeTableProps {
   topCreatives: AggregatedCreativeData[];
   poorCreatives: AggregatedCreativeData[];
+}
+
+interface PreviewState {
+  url: string;
+  title: string;
 }
 
 const getRankIcon = (index: number) => {
@@ -71,7 +78,14 @@ const getStatusBadge = (creative: AggregatedCreativeData) => {
 };
 
 export default function CreativeTable({ topCreatives, poorCreatives }: CreativeTableProps) {
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+
+  const handlePreviewClick = (url: string, title: string) => {
+    setPreview({ url, title });
+  };
+
   return (
+    <>
     <div className="grid grid-cols-2 gap-6">
       {/* 好調CR TOP3 */}
       <div className="bg-white rounded-xl border border-[#cfe7e7] p-6">
@@ -109,15 +123,13 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
                     <td className="py-4 px-2">{getRankIcon(index)}</td>
                     <td className="py-4 px-2">
                       {creative.creativeLink ? (
-                        <a
-                          href={creative.creativeLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate max-w-[140px] block"
+                        <button
+                          onClick={() => handlePreviewClick(creative.creativeLink, creative.creativeName)}
+                          className="font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate max-w-[140px] block text-left cursor-pointer"
                           title={creative.creativeName}
                         >
                           {creative.creativeName}
-                        </a>
+                        </button>
                       ) : (
                         <div className="font-medium text-gray-900 truncate max-w-[140px]" title={creative.creativeName}>
                           {creative.creativeName}
@@ -163,7 +175,7 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
             <p className="text-teal-600">赤字のクリエイティブはありません</p>
           </div>
         ) : (
-          <div className="overflow-x-auto max-h-80 overflow-y-auto">
+          <div className="overflow-x-auto max-h-80 overflow-y-auto overscroll-contain">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-[#cfe7e7]">
@@ -179,15 +191,13 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
                   <tr key={creative.creativeName} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-2">
                       {creative.creativeLink ? (
-                        <a
-                          href={creative.creativeLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate max-w-[150px] block"
+                        <button
+                          onClick={() => handlePreviewClick(creative.creativeLink, creative.creativeName)}
+                          className="font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate max-w-[150px] block text-left cursor-pointer"
                           title={creative.creativeName}
                         >
                           {creative.creativeName}
-                        </a>
+                        </button>
                       ) : (
                         <div className="font-medium text-gray-900 truncate max-w-[150px]" title={creative.creativeName}>
                           {creative.creativeName}
@@ -215,5 +225,14 @@ export default function CreativeTable({ topCreatives, poorCreatives }: CreativeT
         )}
       </div>
     </div>
+
+    {/* プレビューモーダル */}
+    <CreativePreviewModal
+      isOpen={preview !== null}
+      onClose={() => setPreview(null)}
+      url={preview?.url || ''}
+      title={preview?.title}
+    />
+    </>
   );
 }

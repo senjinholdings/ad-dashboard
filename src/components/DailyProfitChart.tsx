@@ -456,7 +456,7 @@ export default function DailyProfitChart({ data }: DailyProfitChartProps) {
                 <span className="text-xs text-gray-400">スクロール可</span>
               )}
             </div>
-            <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-[300px] overflow-y-auto overscroll-contain pr-1">
               {tooltipItems.map((item, index) => (
                 <div key={index} className="flex items-center justify-between gap-4 text-sm">
                   <div className="flex items-center gap-2 min-w-0">
