@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   loadSpreadsheetConfig,
   fetchSpreadsheetDataByName,
@@ -46,6 +46,8 @@ export default function Tab1Premise() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [personNames, setPersonNames] = useState<string[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 担当者リストを取得（IndexedDBから非同期で）
   useEffect(() => {
@@ -66,6 +68,17 @@ export default function Tab1Premise() {
       setSelectedPerson(personNames[0]);
     }
   }, [personNames, selectedPerson]);
+
+  // ドロップダウン外クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // 表示ボタンクリック時の処理
   const handleDisplay = async () => {
@@ -139,20 +152,42 @@ export default function Tab1Premise() {
         {/* 担当者選択UI */}
         <div className="flex items-center gap-3">
           <label className="text-sm text-gray-600 font-medium">担当者:</label>
-          <select
-            value={selectedPerson}
-            onChange={(e) => setSelectedPerson(e.target.value)}
-            className="px-3 py-2 border border-[#cfe7e7] rounded-lg focus:ring-2 focus:ring-[#0b7f7b] focus:border-[#0b7f7b] transition-all text-sm min-w-[120px]"
-          >
-            {personNames.length === 0 && (
-              <option value="">担当者がありません</option>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="px-3 py-2 border border-[#cfe7e7] rounded-lg focus:ring-2 focus:ring-[#0b7f7b] focus:border-[#0b7f7b] transition-all text-sm min-w-[120px] bg-white flex items-center justify-between gap-2"
+            >
+              <span>{selectedPerson || '選択してください'}</span>
+              <span className="material-symbols-outlined text-gray-400 text-lg">expand_more</span>
+            </button>
+            {isDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 w-full bg-white border border-[#cfe7e7] rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                {personNames.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-gray-400">担当者がありません</div>
+                ) : (
+                  personNames.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPerson(name);
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 ${
+                        selectedPerson === name ? 'bg-[#0b7f7b]/10 text-[#0b7f7b]' : 'text-gray-700'
+                      }`}
+                    >
+                      {selectedPerson === name && (
+                        <span className="material-symbols-outlined text-[#0b7f7b] text-lg">check</span>
+                      )}
+                      <span className={selectedPerson === name ? '' : 'ml-6'}>{name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
             )}
-            {personNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+          </div>
           <button
             onClick={handleDisplay}
             disabled={isLoading || !selectedPerson}

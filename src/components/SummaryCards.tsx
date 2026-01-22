@@ -74,7 +74,7 @@ export default function SummaryCards({ data }: SummaryCardsProps) {
       {cards.map((card) => (
         <div
           key={card.label}
-          className="bg-white rounded-xl border border-[#cfe7e7] p-4 hover:shadow-md transition-shadow"
+          className="bg-white rounded-xl border border-[#cfe7e7] p-4"
         >
           <div className="flex items-start justify-between mb-3">
             <div className={`${card.iconBg} p-2 rounded-lg`}>

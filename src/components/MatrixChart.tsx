@@ -151,12 +151,12 @@ const MemoizedScatterChart = memo(function MemoizedScatterChart({ points }: Memo
           type="number"
           dataKey="x"
           domain={[-100, 100]}
-          tick={{ fontSize: 11, fill: '#6b7280' }}
-          tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
+          tick={false}
+          axisLine={false}
           label={{
             value: '← CV少ない　　　　　CV多い →',
             position: 'bottom',
-            offset: 10,
+            offset: -10,
             style: { fontSize: 12, fill: '#6b7280' }
           }}
         />
@@ -165,13 +165,13 @@ const MemoizedScatterChart = memo(function MemoizedScatterChart({ points }: Memo
           type="number"
           dataKey="y"
           domain={[-100, 100]}
-          tick={{ fontSize: 11, fill: '#6b7280' }}
-          tickFormatter={(value) => `${value > 0 ? '+' : ''}${value}`}
+          tick={false}
+          axisLine={false}
           label={{
             value: '← 赤字　　　　黒字 →',
             angle: -90,
             position: 'left',
-            offset: 0,
+            offset: 20,
             style: { fontSize: 12, fill: '#6b7280', textAnchor: 'middle' }
           }}
         />
@@ -273,7 +273,8 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     const minArea = 60, maxArea = 600;
     const area = minArea + ((zValue - 0.5) / 1.5) * (maxArea - minArea);
     const radius = Math.sqrt(area / Math.PI);
-    return radius + 5;
+    // 最小ヒット半径を20pxに設定（小さいバブルでも反応しやすく）
+    return Math.max(20, radius + 8);
   }, []);
 
   // 独自のマウスムーブハンドラ
@@ -281,7 +282,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    if (now - lastThrottleTimeRef.current < 16) return;
+    if (now - lastThrottleTimeRef.current < 100) return;
     lastThrottleTimeRef.current = now;
 
     const container = chartContainerRef.current;
@@ -296,17 +297,26 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const chartLeft = CHART_MARGIN.left;
-    const chartTop = CHART_MARGIN.top;
-    const chartWidth = containerSize.width - CHART_MARGIN.left - CHART_MARGIN.right;
-    const chartHeight = containerSize.height - CHART_MARGIN.top - CHART_MARGIN.bottom;
+    // rechartsの実際のチャートエリア（SVGから測定した値）
+    // SVG解析結果: CV0点(x=-95)がpixel x=133.55, 右端点(x≈100)がpixel x≈565
+    // Y軸: 上端(y=100)がpixel y≈49, 下端(y=-100)がpixel y≈390
+    const RECHARTS_Y_AXIS_WIDTH = 63;  // chartLeft = 60(margin) + 63 = 123
+    const RECHARTS_TOP_OFFSET = 9;     // chartTop = 40(margin) + 9 = 49
+    const RECHARTS_BOTTOM_OFFSET = 30; // X軸ラベル用の追加スペース
 
-    if (chartWidth <= 0 || chartHeight <= 0) return;
+    const chartLeft = CHART_MARGIN.left + RECHARTS_Y_AXIS_WIDTH;
+    const chartTop = CHART_MARGIN.top + RECHARTS_TOP_OFFSET;
+    const chartWidth = containerSize.width - CHART_MARGIN.left - CHART_MARGIN.right - RECHARTS_Y_AXIS_WIDTH;
+    const chartHeight = containerSize.height - CHART_MARGIN.top - CHART_MARGIN.bottom - RECHARTS_TOP_OFFSET - RECHARTS_BOTTOM_OFFSET;
+
+    if (chartWidth <= 0 || chartHeight <= 0) {
+      console.log('[MatrixChart] chartWidth/Height invalid:', { chartWidth, chartHeight, containerSize });
+      return;
+    }
 
     // 最も近いポイントを探す
     let closestPoint: BubbleDataItem | null = null;
     let closestDistSq = Infinity;
-    const EARLY_EXIT_THRESHOLD = 100; // 10px以内なら即決定
 
     const searchStart = performance.now();
     for (const point of points) {
@@ -321,8 +331,6 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
       if (distSq < closestDistSq && distSq < hitRadius * hitRadius) {
         closestDistSq = distSq;
         closestPoint = point;
-        // 十分近ければ早期終了
-        if (distSq < EARLY_EXIT_THRESHOLD) break;
       }
     }
     const searchEnd = performance.now();
@@ -330,21 +338,37 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
     if (closestPoint) {
       clearHideTimeout();
 
-      // ツールチップ位置をDOMで直接更新
+      // ツールチップをカーソルの右下に表示
       tooltip.style.display = 'block';
-      tooltip.style.left = `${Math.max(0, Math.min(mouseX + 10, (containerSize.width || 600) - 280))}px`;
-      tooltip.style.top = `${Math.max(10, Math.min(mouseY - 100, 280))}px`;
+      tooltip.style.left = `${mouseX + 15}px`;
+      tooltip.style.top = `${mouseY + 15}px`;
 
       // ホバー対象が変わった時だけ内容を更新
       const pointKey = closestPoint.creativeName;
       if (lastHoveredPointRef.current !== pointKey) {
         lastHoveredPointRef.current = pointKey;
         setTooltipData(closestPoint);
-        // 内容更新時のみログ出力
         const endTime = performance.now();
-        console.log(`[MatrixChart] 検索: ${(searchEnd - searchStart).toFixed(2)}ms, 合計: ${(endTime - startTime).toFixed(2)}ms, ポイント数: ${points.length}`);
+        console.log(`[MatrixChart] HIT: ${closestPoint.creativeName}, dist=${Math.sqrt(closestDistSq).toFixed(1)}px, 検索: ${(searchEnd - searchStart).toFixed(2)}ms`);
       }
     } else {
+      // デバッグ: 最も近いポイントまでの距離を表示（10回に1回）
+      if (Math.random() < 0.1 && points.length > 0) {
+        let minDist = Infinity;
+        let nearestPoint: BubbleDataItem | null = null;
+        for (const point of points) {
+          const pointPixelX = chartLeft + ((point.x + 100) / 200) * chartWidth;
+          const pointPixelY = chartTop + ((100 - point.y) / 200) * chartHeight;
+          const dist = Math.sqrt((mouseX - pointPixelX) ** 2 + (mouseY - pointPixelY) ** 2);
+          if (dist < minDist) {
+            minDist = dist;
+            nearestPoint = point;
+          }
+        }
+        if (nearestPoint) {
+          console.log(`[MatrixChart] MISS: mouse=(${mouseX.toFixed(0)},${mouseY.toFixed(0)}), nearest=${nearestPoint.creativeName} at dist=${minDist.toFixed(0)}px, hitRadius=${getHitRadius(nearestPoint.z).toFixed(0)}px`);
+        }
+      }
       scheduleHide();
     }
   }, [containerSize, clearHideTimeout, scheduleHide, getHitRadius]);
@@ -477,6 +501,12 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
   // chartPointsRefを更新
   useEffect(() => {
     chartPointsRef.current = chartData.points;
+    // デバッグ: CV0ポイントの確認
+    const cv0Points = chartData.points.filter(p => p.cv === 0);
+    if (cv0Points.length > 0) {
+      console.log(`[MatrixChart] CV0ポイント: ${cv0Points.length}件`, cv0Points.map(p => ({ name: p.creativeName, x: p.x, y: p.y, z: p.z })));
+    }
+    console.log(`[MatrixChart] 全ポイント数: ${chartData.points.length}件`);
   }, [chartData.points]);
 
   const validDataCount = data.filter(c => c.cv > 0 && c.cost > 0).length;
@@ -515,12 +545,9 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
           <div className="bg-teal-100 p-2 rounded-lg">
             <span className="material-symbols-outlined text-[#0b7f7b]">scatter_plot</span>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">
-              パフォーマンスマトリクス
-            </h3>
-            <p className="text-sm text-gray-500">CV × 利益 の4象限相対評価（バブルサイズ: 相対ROAS）</p>
-          </div>
+          <h3 className="text-lg font-semibold text-gray-800">
+            パフォーマンスマトリクス
+          </h3>
         </div>
 
         <div className="flex gap-3">
@@ -537,40 +564,10 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
         </div>
       </div>
 
-      <div className="flex gap-6 mb-4 text-sm bg-gray-50 rounded-lg px-4 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500">平均CV:</span>
-          <span className="font-medium text-gray-800">{formatNumber(chartData.avgCV)}件</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500">黒字:</span>
-          <span className="font-medium text-green-600">{chartData.profitCount}種</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500">赤字:</span>
-          <span className="font-medium text-red-600">{chartData.lossCount}種</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500">平均ROAS:</span>
-          <span className="font-medium text-gray-800">{formatPercent(chartData.avgROAS)}</span>
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-gray-500">対象CR:</span>
-          <span className="font-medium text-gray-800">{validDataCount}種類</span>
-          <span className="text-xs text-gray-400">(CV&gt;0)</span>
-          {chartData.cvZeroCount > 0 && (
-            <>
-              <span className="text-gray-300 mx-1">+</span>
-              <span className="font-medium text-red-600">{chartData.cvZeroCount}種類</span>
-              <span className="text-xs text-gray-400">(CV=0赤字)</span>
-            </>
-          )}
-        </div>
-      </div>
-
       <div
-        className="h-[480px] relative"
+        className="h-[480px] relative outline-none"
         ref={chartContainerRef}
+        data-testid="matrix-chart"
         onMouseMove={handleNativeMouseMove}
         onMouseLeave={scheduleHide}
       >
@@ -581,6 +578,7 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
         <div
           ref={tooltipRef}
           className="tooltip-container absolute z-50"
+          data-testid="matrix-tooltip"
           style={{ display: 'none' }}
           onMouseEnter={handleTooltipMouseEnter}
           onMouseLeave={handleTooltipMouseLeave}
@@ -622,10 +620,6 @@ export default function MatrixChart({ data, onCreativeClick }: MatrixChartProps)
           <span className="text-4xl font-bold opacity-30" style={{ color: QUADRANT_CONFIG[2].color }}>
             利益改善
           </span>
-        </div>
-
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/90 px-2 py-1 rounded text-xs text-gray-500 border border-gray-200 z-0">
-          CV平均 / 損益分岐
         </div>
 
         {chartData.cvZeroCount > 0 && (

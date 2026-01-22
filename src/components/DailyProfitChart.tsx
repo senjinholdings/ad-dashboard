@@ -164,7 +164,7 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
     if (isTooltipPinnedRef.current) return;
 
     const now = Date.now();
-    if (now - lastThrottleTimeRef.current < 16) return;
+    if (now - lastThrottleTimeRef.current < 50) return;
     lastThrottleTimeRef.current = now;
 
     const container = chartContainerRef.current;
@@ -198,10 +198,10 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
 
     clearHideTimeout();
 
-    // ツールチップ位置をDOMで直接更新（React再レンダリングを回避）
+    // ツールチップをカーソルの右下に表示
     tooltip.style.display = 'block';
-    tooltip.style.left = `${Math.max(0, Math.min(x, (containerWidth || 600) - 300))}px`;
-    tooltip.style.top = `${Math.max(10, Math.min(y - 100, 200))}px`;
+    tooltip.style.left = `${x + 15}px`;
+    tooltip.style.top = `${y + 15}px`;
 
     // ホバー対象が変わった時だけ内容を更新
     if (lastHoveredIndexRef.current !== clampedIndex) {
@@ -473,66 +473,62 @@ export default function DailyProfitChart({ data, onCreativeClick }: DailyProfitC
         onMouseMove={handleNativeMouseMove}
         onMouseLeave={handleChartMouseLeave}
       >
-        {/* メモ化されたチャート */}
         <MemoizedChart chartData={chartData} posSlots={posSlots} negSlots={negSlots} />
 
-        {/* カスタムツールチップ（初期非表示、DOMで位置更新） */}
+        {/* ツールチップ（カーソルの右下に表示） */}
         <div
           ref={tooltipRef}
-          className="absolute z-50"
+          className="absolute z-50 pointer-events-none"
           style={{ display: 'none' }}
-          onMouseEnter={handleTooltipMouseEnter}
-          onMouseLeave={handleTooltipMouseLeave}
         >
           {tooltipData && (
-            <>
-              <div className="absolute left-0 top-0 w-5 h-full" />
-              <div
-                className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white ml-5"
-                style={{
-                  minWidth: '260px',
-                  maxWidth: '320px',
-                }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-gray-900">{tooltipData.label}</p>
-                  {isTooltipPinned && (
-                    <span className="text-xs text-gray-400">スクロール可</span>
-                  )}
-                </div>
-                <div className="space-y-1 max-h-[300px] overflow-y-auto overscroll-contain pr-1">
-                  {tooltipItems.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between gap-4 text-sm">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className="w-3 h-3 rounded-sm shrink-0"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        {onCreativeClick ? (
-                          <button
-                            onClick={() => onCreativeClick(item.name, item.link)}
-                            className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate text-left cursor-pointer"
-                          >
-                            {item.name}
-                          </button>
-                        ) : (
-                          <span className="text-gray-600 truncate">{item.name}</span>
-                        )}
-                      </div>
-                      <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                        {formatCurrencyFull(item.value)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
-                  <span className="font-medium text-gray-700">合計</span>
-                  <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                    {formatCurrencyFull(tooltipTotal)}
-                  </span>
-                </div>
+            <div
+              className="border border-[#cfe7e7] rounded-xl shadow-lg p-4 bg-white pointer-events-auto"
+              style={{
+                minWidth: '260px',
+                maxWidth: '320px',
+              }}
+              onMouseEnter={handleTooltipMouseEnter}
+              onMouseLeave={handleTooltipMouseLeave}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-semibold text-gray-900">{tooltipData.label}</p>
+                {isTooltipPinned && (
+                  <span className="text-xs text-gray-400">スクロール可</span>
+                )}
               </div>
-            </>
+              <div className="space-y-1 max-h-[200px] overflow-y-auto overscroll-contain pr-1">
+                {tooltipItems.map((item, index) => (
+                  <div key={index} className="flex items-center justify-between gap-4 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-3 h-3 rounded-sm shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      {onCreativeClick ? (
+                        <button
+                          onClick={() => onCreativeClick(item.name, item.link)}
+                          className="text-[#0b7f7b] hover:text-[#0a6966] hover:underline truncate text-left cursor-pointer"
+                        >
+                          {item.name}
+                        </button>
+                      ) : (
+                        <span className="text-gray-600 truncate">{item.name}</span>
+                      )}
+                    </div>
+                    <span className={`font-medium shrink-0 ${item.value >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
+                      {formatCurrencyFull(item.value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
+                <span className="font-medium text-gray-700">合計</span>
+                <span className={`font-bold ${tooltipTotal >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
+                  {formatCurrencyFull(tooltipTotal)}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>

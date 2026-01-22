@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=optional");
+@import "tailwindcss";
 
 :root {
   --background: #f6f8f8;
@@ -59,6 +59,13 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #0b7f7b;
+}
+
+/* Recharts focus outline disable */
+.recharts-wrapper,
+.recharts-wrapper *:focus,
+.recharts-surface:focus {
+  outline: none !important;
 }
 
 /* Card styles */
