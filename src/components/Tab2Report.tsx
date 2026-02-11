@@ -574,6 +574,11 @@ export default function Tab2Report() {
                 onClose={() => setShowColumnPicker(false)}
               />
             )}
+            <DateRangePicker
+              value={preset}
+              customRange={customRange}
+              onChange={setReportDateRange}
+            />
           </div>
         </div>
         <div className="overflow-x-auto max-h-96 overflow-y-auto overscroll-contain">
