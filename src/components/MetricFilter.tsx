@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 // フィルター対象の種類
 export type MetricFilterType = 'number' | 'percentage' | 'currency' | 'text';
@@ -41,10 +42,27 @@ export default function MetricFilter({ isActive, onFilterChange, metricType }: M
     metricType === 'text' ? 'contains' : '>='
   );
   const [value, setValue] = useState<string>('');
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const conditions = metricType === 'text' ? TEXT_CONDITIONS : NUMBER_CONDITIONS;
+
+  // ポップオーバー位置を計算
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const popoverWidth = 220;
+    let left = rect.right - popoverWidth;
+    // 画面左端からはみ出す場合は右寄せ
+    if (left < 8) left = rect.left;
+    setPopoverPos({ top: rect.bottom + 4, left });
+  }, []);
+
+  // 開閉時にポジション更新
+  useEffect(() => {
+    if (isOpen) updatePosition();
+  }, [isOpen, updatePosition]);
 
   // 外側クリックで閉じる
   useEffect(() => {
@@ -111,10 +129,11 @@ export default function MetricFilter({ isActive, onFilterChange, metricType }: M
         <span className="material-symbols-outlined text-sm">filter_alt</span>
       </button>
 
-      {isOpen && (
+      {isOpen && popoverPos && createPortal(
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50 min-w-[220px]"
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-[9999] min-w-[220px]"
+          style={{ top: popoverPos.top, left: popoverPos.left }}
         >
           <p className="text-xs font-medium text-gray-600 mb-2">フィルター条件</p>
 
@@ -161,7 +180,8 @@ export default function MetricFilter({ isActive, onFilterChange, metricType }: M
               適用
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
