@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { DayPicker, DateRange } from 'react-day-picker';
-import { format, isSameDay, isBefore, startOfDay, subMonths, addMonths } from 'date-fns';
+import { format, isSameDay, startOfDay, subMonths, addMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
@@ -113,21 +113,16 @@ export default function DateRangePicker({ value, customRange, onChange }: DateRa
     }
   };
 
-  // 日付選択
-  const handleDayClick = (day: Date) => {
+  // 日付選択（DayPickerのレンジ選択に委譲）
+  const handleRangeSelect = (range: DateRange | undefined) => {
     setTempPreset('custom');
-
-    if (!tempRange?.from || (tempRange.from && tempRange.to)) {
-      // 新しい選択開始
-      setTempRange({ from: startOfDay(day), to: undefined });
+    if (range?.from) {
+      setTempRange({
+        from: startOfDay(range.from),
+        to: range.to ? startOfDay(range.to) : undefined,
+      });
     } else {
-      // 終了日を設定
-      if (isBefore(day, tempRange.from)) {
-        // 開始日より前をクリックした場合は開始日を再設定
-        setTempRange({ from: startOfDay(day), to: undefined });
-      } else {
-        setTempRange({ from: tempRange.from, to: startOfDay(day) });
-      }
+      setTempRange(undefined);
     }
   };
 
@@ -263,7 +258,7 @@ export default function DateRangePicker({ value, customRange, onChange }: DateRa
                   mode="range"
                   locale={ja}
                   selected={tempRange}
-                  onDayClick={handleDayClick}
+                  onSelect={handleRangeSelect}
                   month={displayMonth}
                   onMonthChange={setDisplayMonth}
                   disabled={{ after: today }}
