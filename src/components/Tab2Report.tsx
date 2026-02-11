@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { CreativeData, AggregatedCreativeData } from '@/types';
 import { calculateSummary, assignCreativeStatus } from '@/utils/csvParser';
 import { loadCreativesFromIndexedDB, saveCreativesToIndexedDB } from '@/utils/indexedDB';
@@ -22,11 +22,14 @@ import DateRangePicker from './DateRangePicker';
 import DailyProfitChart from './DailyProfitChart';
 import MetricFilter, { MetricFilterConfig, MetricFilterType, applyFilter } from './MetricFilter';
 import MultiSelectDropdown from './MultiSelectDropdown';
+import ColumnPickerModal from './ColumnPickerModal';
 import { useReportDateRange } from '@/contexts/ReportDateRangeContext';
 import { useAccount } from '@/contexts/AccountContext';
 import { usePerson } from '@/contexts/PersonContext';
 import { useCreativeSidebar } from '@/contexts/CreativeSidebarContext';
 import { isWithinInterval, parseISO, startOfDay } from 'date-fns';
+
+const VISIBLE_COLUMNS_STORAGE_KEY = 'ad-dashboard-visible-columns';
 
 // テーブルヘッダー定義
 const TABLE_HEADERS: {
@@ -52,10 +55,82 @@ const CREATIVE_SHEET_NAME = 'クリエイティブ';
 // デフォルトのrawシートgid
 const DEFAULT_RAW_GID = '567193483';
 
+// セル値のレンダリング関数
+function renderCellValue(cr: AggregatedCreativeData, key: string): React.ReactNode {
+  switch (key) {
+    case 'adCount':
+      return cr.adCount;
+    case 'impressions':
+      return cr.impressions.toLocaleString();
+    case 'cpm':
+      return `¥${Math.round(cr.cpm).toLocaleString()}`;
+    case 'cpa':
+      return cr.cv > 0 ? `¥${Math.round(cr.cpa).toLocaleString()}` : '-';
+    case 'cost':
+      return `¥${Math.round(cr.cost).toLocaleString()}`;
+    case 'cv':
+      return cr.cv;
+    case 'revenue':
+      return `¥${Math.round(cr.revenue).toLocaleString()}`;
+    case 'profit':
+      return `¥${Math.round(cr.profit).toLocaleString()}`;
+    case 'roas':
+      return `${cr.roas.toFixed(1)}%`;
+    default:
+      return '';
+  }
+}
+
+// セルのスタイルクラスを取得
+function getCellClassName(cr: AggregatedCreativeData, key: string): string {
+  const base = 'py-3 px-3 text-right';
+  switch (key) {
+    case 'adCount':
+      return `${base} text-gray-600`;
+    case 'profit':
+      return `${base} font-medium ${cr.profit >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`;
+    case 'roas':
+      return `${base} font-medium ${cr.roas >= 100 ? 'text-[#0b7f7b]' : 'text-red-600'}`;
+    case 'cv':
+      return `${base} font-medium text-gray-800`;
+    default:
+      return `${base} text-gray-800`;
+  }
+}
+
 export default function Tab2Report() {
   const [creatives, setCreatives] = useState<CreativeData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 表示カラム管理
+  const allColumnKeys = TABLE_HEADERS.map(h => h.key);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return allColumnKeys;
+    try {
+      const saved = localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        const valid = parsed.filter(k => allColumnKeys.includes(k));
+        return valid.length > 0 ? valid : allColumnKeys;
+      }
+    } catch { /* ignore */ }
+    return allColumnKeys;
+  });
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+
+  // visibleColumnsをlocalStorageに保存
+  useEffect(() => {
+    localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  // 表示中のヘッダー（visibleColumnsの順序を尊重）
+  const visibleHeaders = useMemo(
+    () => visibleColumns
+      .map(key => TABLE_HEADERS.find(h => h.key === key))
+      .filter((h): h is typeof TABLE_HEADERS[number] => h !== undefined),
+    [visibleColumns]
+  );
 
   // サイドバー（Context）
   const { openSidebar, setSidebarData } = useCreativeSidebar();
@@ -472,21 +547,40 @@ export default function Tab2Report() {
               </p>
             </div>
           </div>
-          {hasActiveFilters && (
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
+              <button
+                onClick={() => setFilters({})}
+                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-sm">filter_alt_off</span>
+                フィルターをクリア
+              </button>
+            )}
+            {/* 表示項目の変更ボタン */}
             <button
-              onClick={() => setFilters({})}
-              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              onClick={() => setShowColumnPicker(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <span className="material-symbols-outlined text-sm">filter_alt_off</span>
-              フィルターをクリア
+              <span className="material-symbols-outlined text-sm">view_column</span>
+              表示項目の変更
             </button>
-          )}
+            {showColumnPicker && (
+              <ColumnPickerModal
+                allColumns={TABLE_HEADERS.map(h => ({ key: h.key, label: h.label }))}
+                visibleColumns={visibleColumns}
+                fixedColumns={['creativeName']}
+                onApply={setVisibleColumns}
+                onClose={() => setShowColumnPicker(false)}
+              />
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto max-h-96 overflow-y-auto overscroll-contain">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-[#cfe7e7]">
-                {TABLE_HEADERS.map((header) => (
+                {visibleHeaders.map((header) => (
                   <th
                     key={header.key}
                     className={`py-3 px-3 font-medium text-gray-500 text-xs uppercase tracking-wider ${
@@ -520,35 +614,33 @@ export default function Tab2Report() {
             <tbody>
               {filteredAndSortedCreatives.length === 0 ? (
                 <tr>
-                  <td colSpan={TABLE_HEADERS.length} className="py-8 text-center text-gray-400">
+                  <td colSpan={visibleHeaders.length} className="py-8 text-center text-gray-400">
                     条件に一致するデータがありません
                   </td>
                 </tr>
               ) : (
                 filteredAndSortedCreatives.map((cr) => (
                   <tr key={cr.creativeName} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-3">
-                      <button
-                        onClick={() => openSidebar(cr.creativeName, cr.creativeLink)}
-                        className="truncate block max-w-[200px] font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline text-left cursor-pointer"
-                        title={cr.creativeName}
-                      >
-                        {cr.creativeName}
-                      </button>
-                    </td>
-                    <td className="py-3 px-3 text-right text-gray-600">{cr.adCount}</td>
-                    <td className="py-3 px-3 text-right text-gray-800">{cr.impressions.toLocaleString()}</td>
-                    <td className="py-3 px-3 text-right text-gray-800">¥{Math.round(cr.cpm).toLocaleString()}</td>
-                    <td className="py-3 px-3 text-right text-gray-800">{cr.cv > 0 ? `¥${Math.round(cr.cpa).toLocaleString()}` : '-'}</td>
-                    <td className="py-3 px-3 text-right text-gray-800">¥{Math.round(cr.cost).toLocaleString()}</td>
-                    <td className="py-3 px-3 text-right font-medium text-gray-800">{cr.cv}</td>
-                    <td className="py-3 px-3 text-right text-gray-800">¥{Math.round(cr.revenue).toLocaleString()}</td>
-                    <td className={`py-3 px-3 text-right font-medium ${cr.profit >= 0 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                      ¥{Math.round(cr.profit).toLocaleString()}
-                    </td>
-                    <td className={`py-3 px-3 text-right font-medium ${cr.roas >= 100 ? 'text-[#0b7f7b]' : 'text-red-600'}`}>
-                      {cr.roas.toFixed(1)}%
-                    </td>
+                    {visibleHeaders.map((header) => {
+                      if (header.key === 'creativeName') {
+                        return (
+                          <td key={header.key} className="py-3 px-3">
+                            <button
+                              onClick={() => openSidebar(cr.creativeName, cr.creativeLink)}
+                              className="truncate block max-w-[200px] font-medium text-[#0b7f7b] hover:text-[#0a6966] hover:underline text-left cursor-pointer"
+                              title={cr.creativeName}
+                            >
+                              {cr.creativeName}
+                            </button>
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={header.key} className={getCellClassName(cr, header.key)}>
+                          {renderCellValue(cr, header.key)}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))
               )}
